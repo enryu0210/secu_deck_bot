@@ -1,0 +1,12 @@
+[build]
+# Railway가 Python 앱으로 인식하고 requirements.txt를 자동 설치
+builder = "NIXPACKS"
+
+[deploy]
+# 봇 실행 명령어
+startCommand = "python bot.py"
+
+# 봇은 웹 서버가 아니므로 헬스체크 비활성화
+healthcheckPath = ""
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5
