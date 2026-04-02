@@ -1,6 +1,9 @@
 # 절대 커밋하면 안 되는 파일
 .env
 
+# SQLite DB 파일 (런타임 생성, 커밋 불필요)
+*.db
+
 # Python 캐시
 __pycache__/
 *.pyc
