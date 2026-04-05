@@ -12,3 +12,5 @@ __pycache__/
 # 이미지 등 불필요한 파일
 *.png
 *.jpg
+
+.claude/
