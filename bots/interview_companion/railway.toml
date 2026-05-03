@@ -1,0 +1,12 @@
+# =====================================================================
+# Interview Companion — Railway 서비스 설정
+# =====================================================================
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "bots/interview_companion/Dockerfile"
+
+[deploy]
+startCommand = "uv run python -m interview_companion.main"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

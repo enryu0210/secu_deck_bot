@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "design-echo"
+version = "0.1.0"
+description = "디자인 시스템·핸드오프 봇 (Phase 2)"
+requires-python = ">=3.12"
+
+dependencies = [
+    "sd-core",
+    "discord.py>=2.4",
+    "anthropic>=0.40",
+    "google-genai>=0.3",
+    "python-dotenv>=1.0",
+    # design_system YAML 로딩
+    "pyyaml>=6.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/design_echo"]

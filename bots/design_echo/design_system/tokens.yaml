@@ -1,0 +1,71 @@
+# =====================================================================
+# Argos 디자인 시스템 — 토큰 정의 (봇의 "정답지")
+# ---------------------------------------------------------------------
+# 디자인팀과 함께 유지. mtime 감지로 봇 재시작 없이 갱신됨.
+# 모든 색상은 대소문자 무관 매칭 (소문자 정규화).
+# =====================================================================
+
+colors:
+  # 브랜드 (Discord 임베드 컬러도 primary.500 사용)
+  primary:
+    "50":  "#EFF6FF"
+    "100": "#DBEAFE"
+    "500": "#2563EB"
+    "600": "#1D4ED8"
+    "900": "#1E3A8A"
+
+  # 의미 색상 (위험·경고·성공 — 보안 SaaS 라 자주 쓰임)
+  semantic:
+    danger:  "#DC2626"
+    warning: "#D97706"
+    success: "#059669"
+    info:    "#2563EB"
+
+  # 중립 — 대시보드 배경·텍스트
+  neutral:
+    bg_primary:    "#FFFFFF"
+    bg_secondary:  "#F9FAFB"
+    border:        "#E5E7EB"
+    border_strong: "#D1D5DB"
+    text_primary:   "#111827"
+    text_secondary: "#6B7280"
+    text_disabled:  "#9CA3AF"
+
+  # 점검 결과 등급 — Argos 도메인 특화
+  severity:
+    high: "#FEE2E2"   # 배경
+    high_text: "#991B1B"
+    med:  "#FEF3C7"
+    med_text: "#92400E"
+    low:  "#DBEAFE"
+    low_text: "#1E40AF"
+
+typography:
+  fonts:
+    sans: Pretendard
+    mono: "JetBrains Mono"
+  sizes:
+    h1:      { size: 32, weight: 700, line_height: 1.3 }
+    h2:      { size: 24, weight: 600, line_height: 1.4 }
+    h3:      { size: 18, weight: 600, line_height: 1.5 }
+    body:    { size: 15, weight: 400, line_height: 1.6 }
+    body_strong: { size: 15, weight: 600, line_height: 1.6 }
+    caption: { size: 13, weight: 400, line_height: 1.5 }
+    micro:   { size: 12, weight: 400, line_height: 1.5 }
+
+# 8px 그리드. 이 외 값은 일관성 위반.
+spacing:
+  scale: [4, 8, 12, 16, 20, 24, 32, 40, 48, 64]
+  unit: px
+
+radius:
+  sm:   4
+  md:   8
+  lg:   12
+  xl:   16
+  full: 9999
+
+elevation:
+  card:    "0 1px 3px rgba(0,0,0,0.06)"
+  popover: "0 4px 12px rgba(0,0,0,0.10)"
+  modal:   "0 16px 40px rgba(0,0,0,0.16)"

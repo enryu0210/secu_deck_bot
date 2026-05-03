@@ -1,0 +1,63 @@
+# =====================================================================
+# Argos 디자인 시스템 — 등록 컴포넌트
+# ---------------------------------------------------------------------
+# 시안에서 "이건 신규 컴포넌트" 인지 판별할 때 봇이 참조.
+# 새 컴포넌트가 시안에 등장하면 봇이 "DS 미등록" 으로 표시.
+# =====================================================================
+
+components:
+  - id: button_primary
+    name: Button (Primary)
+    variants: [default, hover, focus, disabled]
+    notes: 브랜드 primary.500 배경, 텍스트 white, padding 12px 20px
+
+  - id: button_secondary
+    name: Button (Secondary)
+    variants: [default, hover, disabled]
+    notes: 테두리 neutral.border_strong, 텍스트 text_primary
+
+  - id: button_destructive
+    name: Button (Destructive)
+    variants: [default, hover, disabled]
+    notes: semantic.danger 배경 — 점검 항목 일괄 삭제 등에만
+
+  - id: card
+    name: Card
+    variants: [default, hoverable, selected]
+    notes: bg_primary, border 1px neutral.border, radius md, padding 24px
+
+  - id: severity_badge
+    name: SeverityBadge
+    variants: [HIGH, MED, LOW]
+    notes: severity 색상 맵 사용. 색만으로 의미 전달 금지 → 아이콘 동반 필수.
+
+  - id: input_text
+    name: Input (Text)
+    variants: [default, focus, error, disabled]
+
+  - id: dropdown
+    name: Dropdown
+    variants: [closed, open]
+
+  - id: tabs
+    name: Tabs
+    variants: [horizontal, vertical]
+
+  - id: modal
+    name: Modal
+    variants: [sm, md, lg]
+    notes: backdrop rgba(0,0,0,0.5)
+
+  - id: scan_result_card
+    name: ScanResultCard
+    notes: Card 베이스 + 점수 배지(우상단) + SeverityBadge
+
+  - id: progress_inline
+    name: Progress (Inline)
+    notes: 점검 실행 중 표시. 4px 두께.
+
+  - id: empty_state
+    name: EmptyState
+    notes: 점검 이력 없을 때. 일러스트 + 1차 액션 버튼.
+
+# 시안에서 발견했는데 위 목록에 없으면 "신규 컴포넌트 — DS 등록 검토 필요" 로 표시.
