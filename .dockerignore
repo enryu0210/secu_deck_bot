@@ -1,0 +1,20 @@
+# Docker 빌드 컨텍스트에서 제외 — 모노레포라 빌드 시간 최적화 중요
+.git
+.gitignore
+.env
+.env.local
+.env.*.local
+.venv
+.vscode
+.claude
+.idea
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+*.db
+docs
+README.md
+SecuDeck-Chatbot
+SecuDeck-schedulebot

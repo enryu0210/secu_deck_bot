@@ -1,0 +1,89 @@
+# Argos 코드베이스 알려진 안티패턴.
+# rule_matcher 가 LLM 호출 전에 정규식·간단 휴리스틱으로 1차 검사.
+# severity: CRITICAL > HIGH > MED > LOW
+
+patterns:
+  - id: hardcoded_api_key
+    severity: CRITICAL
+    description: API 키 / 시크릿 하드코딩
+    regex: '(?i)(api[_-]?key|secret|token|password)\s*=\s*["''][a-zA-Z0-9_\-]{20,}["'']'
+    suggestion: 환경변수로 이동, .env 로 관리. Stage 0 키 무효화 절차 참조.
+
+  - id: openai_key_pattern
+    severity: CRITICAL
+    description: OpenAI API 키 패턴 노출
+    regex: 'sk-[a-zA-Z0-9]{32,}'
+    suggestion: 즉시 키 무효화 후 환경변수로 이동.
+
+  - id: anthropic_key_pattern
+    severity: CRITICAL
+    description: Anthropic API 키 패턴 노출
+    regex: 'sk-ant-[a-zA-Z0-9_\-]{60,}'
+    suggestion: 즉시 키 무효화 후 환경변수로 이동.
+
+  - id: aws_access_key
+    severity: CRITICAL
+    description: AWS Access Key 노출
+    regex: 'AKIA[0-9A-Z]{16}'
+    suggestion: 즉시 IAM 콘솔에서 키 비활성화.
+
+  - id: github_pat
+    severity: HIGH
+    description: GitHub PAT 노출
+    regex: 'ghp_[a-zA-Z0-9]{36}'
+    suggestion: GitHub Settings → Developer → Tokens 에서 즉시 revoke.
+
+  - id: pii_to_external_api
+    severity: HIGH
+    description: PII 가 마스킹 없이 외부 LLM API 로 전송될 위험
+    # AST 가 정확하지만 MVP 는 정규식 휴리스틱 — `mask_pii` 호출 부재 + LLM 호출 동시 등장
+    regex_co_occur:
+      must_match: '(?i)(openai|anthropic|gemini|client)\.[a-zA-Z_]*(create|generate|messages)'
+      must_not_match: '(?i)mask_pii|anonymize|redact'
+    suggestion: 사전에 mask_pii(text) 적용 후 호출. Argos_Context § 4.2 참조.
+
+  - id: weak_random_in_security
+    severity: MED
+    description: 보안 컨텍스트에서 random.* 사용 (DoD 덮어쓰기·토큰 생성 등)
+    regex: '\brandom\.(random|randint|choice|choices|sample)\('
+    context_hint: dod|overwrite|key|token|password|nonce
+    suggestion: secrets 또는 os.urandom 사용. DoD 5220.22-M 준수.
+
+  - id: bare_except
+    severity: MED
+    description: bare except 사용 (예외 마스킹)
+    regex: '(?m)^\s*except\s*:'
+    suggestion: 구체 예외 명시. 최소한 `except Exception:` 사용.
+
+  - id: legacy_import
+    severity: LOW
+    description: src/legacy/ 모듈 import (정리 대상)
+    regex: '(?m)from\s+legacy[\.\s]|import\s+legacy[\.\s]'
+    suggestion: 신규 모듈로 이전 검토.
+
+  - id: missing_test_for_scanner
+    severity: MED
+    description: scanner_rules / detector 함수가 단위 테스트 없이 변경됨
+    # 이건 단순 패턴 매칭이 아닌 컨텍스트 필요 — 휴리스틱: 함수 정의 + assert 없음
+    regex: '(?m)^\s*def\s+(detect_|scan_)[a-zA-Z_]+\('
+    context_hint: 핵심 탐지 로직
+    suggestion: 동일 모듈 또는 tests/ 에 단위 테스트 추가. 핵심 탐지 함수는 100% 커버.
+
+  - id: scanner_regex_no_sample_exclude
+    severity: MED
+    description: 주민/카드/전화 번호 정규식이 'sample'·'mock' 키워드를 제외하지 않음
+    regex: '\d{6}\s*-\s*\d{7}|\d{3}-\d{2}-\d{5}'
+    context_hint: scanner_rules
+    suggestion: 정규식에 negative lookbehind 또는 사후 필터로 sample/mock/test 제외.
+
+  - id: subprocess_shell_true
+    severity: HIGH
+    description: subprocess 호출에서 shell=True 사용 (명령어 인젝션 위험)
+    regex: 'subprocess\.(run|Popen|call|check_output)\([^)]*shell\s*=\s*True'
+    suggestion: shell=True 제거하고 인자 리스트로 전달.
+
+  - id: sql_string_concat
+    severity: HIGH
+    description: SQL 쿼리 문자열 연결 (인젝션 위험)
+    regex: '(SELECT|INSERT|UPDATE|DELETE)[^"]*"\s*\+\s*\w+|f"(SELECT|INSERT|UPDATE|DELETE)[^"]*\{'
+    suggestion: 파라미터 바인딩 사용 ($1, %s, ? 등).

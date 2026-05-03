@@ -1,0 +1,14 @@
+# =====================================================================
+# Pitch Sharpener — Railway 서비스 설정
+# =====================================================================
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "bots/pitch_sharpener/Dockerfile"
+
+[deploy]
+startCommand = "uv run python -m pitch_sharpener.main"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# 봇은 외부 헬스체크 endpoint 가 없으므로 별도 healthcheck 설정 X.

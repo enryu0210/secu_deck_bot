@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "code-sentinel"
+version = "0.1.0"
+description = "코드 리뷰 + KISA·개인정보보호법 정합성 체크 봇 (Phase 1B)"
+requires-python = ">=3.12"
+
+dependencies = [
+    "sd-core",
+    "discord.py>=2.4",
+    "anthropic>=0.40",
+    "python-dotenv>=1.0",
+    # GitHub PR 가져오기
+    "httpx>=0.27",
+    # YAML rules
+    "pyyaml>=6.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/code_sentinel"]

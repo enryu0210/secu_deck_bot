@@ -1,0 +1,60 @@
+# KISA(한국인터넷진흥원) 개인정보 안전성 확보조치 기준 핵심 항목.
+# 코드 리뷰 시 LLM 시스템 프롬프트에 함께 주입되어 정합성 판단 기반.
+
+guidelines:
+  - id: KISA_4_1
+    title: 비밀번호 작성 규칙
+    summary: |
+      비밀번호는 8자 이상(영문·숫자·특수문자 2종 조합 시 10자 이상),
+      추측 가능한 정보(생일·전화번호·반복 문자) 사용 금지.
+    code_check: |
+      비밀번호 검증 로직이 길이·복잡도 정책을 만족하는가.
+
+  - id: KISA_4_2
+    title: 비밀번호 저장
+    summary: |
+      비밀번호는 일방향 해시(bcrypt, scrypt, Argon2 권장)로 저장.
+      MD5 / SHA-1 / SHA-256(salt 없음) 사용 금지.
+    code_check: |
+      해싱 함수가 어떤 알고리즘인가, salt 가 사용자별로 다른가, work factor 가 충분한가.
+
+  - id: KISA_4_3
+    title: 암호화 알고리즘
+    summary: |
+      AES-128/192/256, ARIA, SEED, ChaCha20 권장.
+      DES, 3DES, RC4 사용 금지. 모드는 CBC + HMAC 또는 GCM.
+    code_check: |
+      암호화 알고리즘과 모드 확인. ECB 절대 금지. CBC 는 IV 무작위, GCM 권장.
+
+  - id: KISA_5_1
+    title: 접근 통제
+    summary: |
+      사용자 권한은 최소 권한 원칙. RBAC / ABAC.
+      관리자·일반 사용자 구분. 권한 변경 감사 로그 필수.
+    code_check: |
+      엔드포인트 권한 체크가 일관되게 적용되는가. 직접 SQL 접근 금지.
+
+  - id: KISA_6_1
+    title: 접속 기록 보관
+    summary: |
+      접속 기록(로그인·로그아웃·중요 처리)을 1년 이상 보관.
+      위변조 방지를 위해 별도 저장소 또는 append-only.
+    code_check: |
+      audit_log 테이블 또는 동급 저장 메커니즘 존재.
+
+  - id: KISA_7_1
+    title: 개인정보 파기
+    summary: |
+      DoD 5220.22-M (3패스 덮어쓰기) 또는 동등 표준.
+      소프트 삭제만으로는 불충분. 백업·캐시 포함 완전 삭제.
+    code_check: |
+      파기 함수가 단순 DELETE / unlink 가 아닌 다중 패스 덮어쓰기 수행.
+      마지막 패스에 secrets / os.urandom 사용.
+
+  - id: KISA_8_1
+    title: 외부 송수신 암호화
+    summary: |
+      개인정보 송수신은 TLS 1.2 이상. 자체 인증서 사용 금지.
+      클라이언트 → 서버, 서버 → 위탁자 양방향 모두.
+    code_check: |
+      HTTP 평문 호출 부재. requests / httpx 호출 시 verify=True 기본 유지.

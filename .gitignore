@@ -1,16 +1,49 @@
-# 절대 커밋하면 안 되는 파일
+# =========================================================
+# Secu Deck Bots — .gitignore
+# =========================================================
+
+# --- 절대 커밋 금지 (시크릿) ---
 .env
+.env.local
+.env.*.local
+*.key
+*.pem
 
-# SQLite DB 파일 (런타임 생성, 커밋 불필요)
+# --- 데이터베이스 / 런타임 산출물 ---
 *.db
+*.sqlite
+*.sqlite3
 
-# Python 캐시
+# --- Python ---
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# 이미지 등 불필요한 파일
+# --- uv ---
+# uv.lock 은 커밋해야 재현 가능 빌드. 반드시 push.
+# 단, 임시 빌드 산출물은 제외.
+dist/
+build/
+
+# --- IDE / 도구 ---
+.claude/
+.vscode/
+.idea/
+
+# --- 시안·이미지 자산 (디자인팀 작업물 별도 보관) ---
 *.png
 *.jpg
+*.jpeg
 
-.claude/
+# --- Stage 0 통과 표시 파일 (개인 환경별 다름) ---
+STAGE_0_DONE.md
+
+# --- Argos 컨텍스트 (제공 후 직접 배치, 외부 노출 위험) ---
+shared/argos_context/Argos_Context.md

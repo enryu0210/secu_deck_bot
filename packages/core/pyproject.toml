@@ -1,0 +1,42 @@
+# =====================================================================
+# sd-core — 모든 Secu Deck 봇이 공유하는 코어 패키지
+# ---------------------------------------------------------------------
+# 봇 추가 시 이 패키지를 워크스페이스 의존성으로 가져오면
+# LLMRouter, Persona, ArgosContext, CostTracker, BaseBot 을 즉시 사용 가능.
+# =====================================================================
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sd-core"
+version = "0.1.0"
+description = "Secu Deck 봇 공용 코어 (LLM 라우팅·페르소나·비용 추적·Argos 컨텍스트)"
+requires-python = ">=3.12"
+
+dependencies = [
+    # LLM SDK — 직접 사용, 래퍼 X (00_OVERVIEW 원칙)
+    "anthropic>=0.40.0",
+    "google-genai>=0.3.0",
+    "openai>=1.40.0",
+    # Discord
+    "discord.py>=2.4.0",
+    # YAML 페르소나·룰 로더
+    "pyyaml>=6.0",
+    # 환경변수
+    "python-dotenv>=1.0.0",
+    # Postgres (Phase 2+에서 활성화)
+    "asyncpg>=0.29.0",
+    # 구조화 로깅
+    "structlog>=24.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sd_core"]

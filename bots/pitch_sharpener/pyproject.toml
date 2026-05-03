@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pitch-sharpener"
+version = "0.1.0"
+description = "사업계획서 6 페르소나 정밀 리뷰 봇 (Phase 1A)"
+requires-python = ">=3.12"
+
+dependencies = [
+    "sd-core",
+    "discord.py>=2.4",
+    "anthropic>=0.40",
+    "python-dotenv>=1.0",
+    # 문서 파싱
+    "pypdf>=4.0",
+    "python-docx>=1.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pitch_sharpener"]

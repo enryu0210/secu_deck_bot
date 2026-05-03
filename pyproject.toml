@@ -1,0 +1,27 @@
+# =====================================================================
+# Secu Deck Bots — uv 워크스페이스 루트
+# ---------------------------------------------------------------------
+# 이 파일은 모노레포의 최상위 pyproject.toml.
+# packages/ 와 bots/ 안의 각 패키지를 워크스페이스 멤버로 묶는다.
+# 각 봇은 Railway에서 독립 서비스로 배포되지만, 코드는 한 저장소에서 관리.
+# =====================================================================
+
+[project]
+name = "secu-deck-bots"
+version = "0.1.0"
+description = "Secu Deck Argos B2B SaaS 개발 가속용 Discord 봇 모노레포"
+requires-python = ">=3.12"
+# 루트는 패키지가 아니라 워크스페이스 컨테이너이므로 dependencies는 비워둠.
+dependencies = []
+
+# uv 워크스페이스 설정 — packages/* 와 bots/* 안의 모든 패키지 자동 인식
+[tool.uv.workspace]
+members = [
+    "packages/*",
+    "bots/*",
+]
+
+# 워크스페이스 내부 의존성 별칭. 각 봇 pyproject.toml 에서 sd-core 로 참조하면
+# 자동으로 packages/core 를 가리킨다.
+[tool.uv.sources]
+sd-core = { workspace = true }
