@@ -20,11 +20,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from sd_core.discord.base_bot import SecuDeckBot
+from sd_core.discord.internal_api import InternalAPIServer
 from sd_core.utils.errors import ConfigError
 from sd_core.utils.logger import get_logger
 
 from interview_companion.commands import install_commands
 from interview_companion.insight_extractor import InsightExtractor
+from interview_companion.internal_handlers import InterviewInternalHandlers
 from interview_companion.interview_logger import InterviewLogger
 from interview_companion.interview_prep import InterviewPrep
 from interview_companion.storage import InterviewStorage
@@ -77,6 +79,12 @@ async def _async_main() -> None:
 
     install_commands(bot, prep, logger_engine, insight_engine, storage)
 
+    # cos 위임용 내부 API.
+    handlers = InterviewInternalHandlers(prep, insight_engine)
+    api = InternalAPIServer(bot_name="interview_companion")
+    api.register("interview_prep", handlers.interview_prep)
+    api.register("interview_insight", handlers.interview_insight)
+
     _log.info(
         "starting_interview_companion",
         hypotheses=len(prep.all_hypotheses()),
@@ -84,7 +92,11 @@ async def _async_main() -> None:
         guild_sync=bot._sync_guild_id,
     )
     async with bot:
-        await bot.start(token)
+        await api.start()
+        try:
+            await bot.start(token)
+        finally:
+            await api.stop()
 
 
 def main() -> None:

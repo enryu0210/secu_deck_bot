@@ -19,6 +19,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from sd_core.discord.base_bot import SecuDeckBot
+from sd_core.discord.internal_api import InternalAPIServer
 from sd_core.utils.errors import ConfigError
 from sd_core.utils.logger import get_logger
 
@@ -26,6 +27,7 @@ from design_echo.commands import install_commands
 from design_echo.consistency_checker import ConsistencyChecker
 from design_echo.copy_reviewer import CopyReviewer
 from design_echo.design_system import DesignSystem
+from design_echo.internal_handlers import DesignInternalHandlers
 from design_echo.spec_generator import SpecGenerator
 
 
@@ -72,6 +74,13 @@ async def _async_main() -> None:
 
     install_commands(bot, checker, spec, copy)
 
+    # cos 위임용 내부 API.
+    handlers = DesignInternalHandlers(checker, spec, copy)
+    api = InternalAPIServer(bot_name="design_echo")
+    api.register("design_check", handlers.design_check)
+    api.register("design_spec", handlers.design_spec)
+    api.register("design_copy", handlers.design_copy)
+
     _log.info(
         "starting_design_echo",
         ds_components=len(ds.components()),
@@ -79,7 +88,11 @@ async def _async_main() -> None:
         guild_sync=bot._sync_guild_id,
     )
     async with bot:
-        await bot.start(token)
+        await api.start()
+        try:
+            await bot.start(token)
+        finally:
+            await api.stop()
 
 
 def main() -> None:

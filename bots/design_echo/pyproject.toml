@@ -16,6 +16,9 @@ dependencies = [
     "python-dotenv>=1.0",
     # design_system YAML 로딩
     "pyyaml>=6.0",
+    # 내부 API (cos 위임 호출)
+    "fastapi>=0.110",
+    "uvicorn>=0.30",
 ]
 
 [tool.hatch.build.targets.wheel]

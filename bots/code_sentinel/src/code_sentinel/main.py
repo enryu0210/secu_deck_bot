@@ -19,11 +19,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from sd_core.discord.base_bot import SecuDeckBot
+from sd_core.discord.internal_api import InternalAPIServer
 from sd_core.utils.errors import ConfigError
 from sd_core.utils.logger import get_logger
 
 from code_sentinel.commands import install_commands
 from code_sentinel.github_fetcher import GitHubFetcher
+from code_sentinel.internal_handlers import CodeInternalHandlers
 from code_sentinel.reviewer import CodeReviewer
 
 
@@ -52,13 +54,24 @@ async def _async_main() -> None:
     fetcher = GitHubFetcher()
     install_commands(bot, reviewer, fetcher)
 
+    # cos 위임용 내부 API.
+    handlers = CodeInternalHandlers(reviewer)
+    api = InternalAPIServer(bot_name="code_sentinel")
+    api.register("code_review", handlers.code_review)
+    api.register("code_test", handlers.code_test)
+    api.register("code_kisa", handlers.code_kisa)
+
     _log.info(
         "starting_code_sentinel",
         rules_loaded=len(reviewer.matcher.rules),
         guild_sync=bot._sync_guild_id,
     )
     async with bot:
-        await bot.start(token)
+        await api.start()
+        try:
+            await bot.start(token)
+        finally:
+            await api.stop()
 
 
 def main() -> None:

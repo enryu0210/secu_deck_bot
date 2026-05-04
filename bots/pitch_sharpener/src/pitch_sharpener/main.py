@@ -18,11 +18,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from sd_core.discord.base_bot import SecuDeckBot
+from sd_core.discord.internal_api import InternalAPIServer
 from sd_core.utils.errors import ConfigError
 from sd_core.utils.logger import get_logger
 
 from pitch_sharpener.commands import install_commands
 from pitch_sharpener.document_parser import DocumentParser
+from pitch_sharpener.internal_handlers import PitchInternalHandlers
 from pitch_sharpener.review_engine import ReviewEngine
 
 
@@ -54,13 +56,24 @@ async def _async_main() -> None:
     parser = DocumentParser()
     install_commands(bot, engine, parser)
 
+    # cos(Chief of Staff) 위임 호출용 내부 API. INTERNAL_API_SECRET 비어 있으면
+    # 서버는 뜨지만 모든 호출이 503 으로 거부됨 → 우연한 노출 방지.
+    handlers = PitchInternalHandlers(engine)
+    api = InternalAPIServer(bot_name="pitch_sharpener")
+    api.register("pitch_quick", handlers.pitch_quick)
+    api.register("pitch_focus", handlers.pitch_focus)
+
     _log.info(
         "starting_pitch_sharpener",
         personas_loaded=len(engine.personas),
         guild_sync=bot._sync_guild_id,
     )
     async with bot:
-        await bot.start(token)
+        await api.start()
+        try:
+            await bot.start(token)
+        finally:
+            await api.stop()
 
 
 def main() -> None:

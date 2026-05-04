@@ -17,6 +17,9 @@ dependencies = [
     "httpx>=0.27",
     # YAML rules
     "pyyaml>=6.0",
+    # 내부 API (cos 위임 호출)
+    "fastapi>=0.110",
+    "uvicorn>=0.30",
 ]
 
 [tool.hatch.build.targets.wheel]
