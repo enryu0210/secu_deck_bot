@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "argos-self-audit"
+version = "0.1.0"
+description = "Argos 코드베이스 자가 검증 봇 — 룰베이스 스캔 + GitHub PR 자동 검토 (Phase 4, LLM 호출 없음)"
+requires-python = ">=3.12"
+
+# 옵션 B 채택: LLM 호출을 하지 않으므로 anthropic SDK 의존성 미포함.
+# sd-core 의 LLMRouter 는 `bot.llm.call()` 호출 시점에만 SDK 를 import 하는 lazy 구조라
+# 부팅에는 영향 없음 (검증 완료).
+dependencies = [
+    "sd-core",
+    "discord.py>=2.4",
+    "python-dotenv>=1.0",
+    # GitHub REST + 의존성 lockfile 페치
+    "httpx>=0.27",
+    # checks/*.yaml + 리포트 템플릿
+    "pyyaml>=6.0",
+    # 내부 API 서버 (cos 위임 + GitHub webhook 동일 포트에 노출)
+    "fastapi>=0.110",
+    "uvicorn>=0.30",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/argos_self_audit"]

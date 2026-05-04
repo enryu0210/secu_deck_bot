@@ -61,6 +61,10 @@ ROUTABLE_ACTIONS: dict[tuple[str, str], str] = {
         "디자인 시안(이미지) → 개발 핸드오프 spec. params.screen_name 필수.",
     ("design_echo", "design_copy"):
         "UX 카피 검토. params={current_copy, screen_context?, purpose?}.",
+    ("argos_self_audit", "audit_scan"):
+        "Argos 레포 즉시 룰베이스 스캔 (시크릿/PII/KISA/레거시 + 의존성 CVE). LLM 호출 없음.",
+    ("argos_self_audit", "audit_feature"):
+        "신규 기능 PRD 텍스트 → 개인정보보호법 조항 키워드 매핑 + 위험 시나리오. params.prd_text 필수. LLM 호출 없음.",
     ("self", "answer"):
         "위 봇으로 위임할 필요가 없는 가벼운 일반 질문. cos 가 직접 답변.",
 }
@@ -80,6 +84,11 @@ _INTERVIEW_HINTS = re.compile(r"(인터뷰|고객.*페인|누적.*분석|고객 
 _COPY_HINTS = re.compile(r"(카피|문구|버튼.*텍스트|CTA|마이크로카피|문장.*톤)", re.IGNORECASE)
 _DESIGN_SPEC_HINTS = re.compile(r"(spec|핸드오프|개발자에게|토큰.*추출)", re.IGNORECASE)
 _SECURITY_HINTS = re.compile(r"(보안|취약|injection|XSS|CSRF|PII|민감.*정보)", re.IGNORECASE)
+# self-audit 즉시 스캔을 명시적으로 부르는 키워드 ("자가 검증" / "self-audit" / "전체 스캔" / "리포지토리 스캔")
+_AUDIT_SCAN_HINTS = re.compile(
+    r"(self.?audit|자가.?검증|자가.?점검|레포.*스캔|repo.*scan|argos 점검|전체 점검)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -143,14 +152,25 @@ class IntentRouter:
                 return True
             return any(t.startswith("image/") for t in types)
 
-        # 명시적 KISA/컴플라이언스
+        # 명시적 self-audit 키워드 — 즉시 룰베이스 스캔으로 라우팅
+        if _AUDIT_SCAN_HINTS.search(text) and not (has_ext(_CODE_EXTS) or has_image()):
+            return Intent(
+                bot="argos_self_audit",
+                action="audit_scan",
+                reason="self-audit/전체 스캔 키워드",
+                confidence=0.85,
+                source="rule",
+            )
+
+        # 명시적 KISA/컴플라이언스 — 코드 첨부 없으면 PRD 매핑(audit_feature) 으로 위임.
+        # Code Sentinel 의 code_kisa 와 달리 LLM 비용 0 이라 일상 질문에 적합.
         if _KISA_HINTS.search(text) and not (has_ext(_CODE_EXTS) or has_image()):
             return Intent(
-                bot="code_sentinel",
-                action="code_kisa",
-                reason="KISA/PIPA 키워드 + 코드 첨부 없음",
-                confidence=0.85,
-                params={"feature_description": text},
+                bot="argos_self_audit",
+                action="audit_feature",
+                reason="KISA/PIPA 키워드 + 코드 첨부 없음 → 룰베이스 매핑(LLM 0)",
+                confidence=0.8,
+                params={"prd_text": text},
                 source="rule",
             )
 

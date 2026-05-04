@@ -1,0 +1,62 @@
+# =====================================================================
+# 한국 맥락 PII (개인식별정보) 누출 패턴.
+# Argos 자체는 보안 도구라 PII 를 직접 다룰 일이 적지만, 로그·테스트 코드에
+# 실제 데이터가 묻어 들어가는 사고가 가장 흔하다 → 그걸 잡는 게 목적.
+# =====================================================================
+patterns:
+  - id: korean_rrn
+    severity: CRITICAL
+    description: "주민등록번호 형식 발견 (실데이터일 가능성)"
+    # 6자리(YYMMDD)-1자리 성별 + 6자리 — 너무 광범위해서 false positive 많지만 CRITICAL 이라 보수적으로 잡음
+    regex: '\b(?:[0-9]{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01]))-?[1-4][0-9]{6}\b'
+    suggestion: "테스트 데이터면 마스킹(YYMMDD-1******), 운영 코드면 즉시 제거·암호화 저장."
+
+  - id: korean_phone
+    severity: HIGH
+    description: "한국 휴대전화 번호 형식 발견"
+    regex: '\b01[016789][-\s.]?\d{3,4}[-\s.]?\d{4}\b'
+    suggestion: "테스트 더미는 '010-0000-XXXX' 형식 권장. 실데이터면 마스킹 필요."
+
+  - id: korean_business_no
+    severity: MED
+    description: "한국 사업자등록번호 형식 (10자리 NNN-NN-NNNNN)"
+    regex: '\b\d{3}-\d{2}-\d{5}\b'
+    suggestion: "공개 가능한 자사 번호인지 확인. 외부 사업자 데이터는 마스킹."
+
+  - id: bank_account_kr
+    severity: HIGH
+    description: "한국 은행 계좌번호 의심 패턴"
+    regex: '\b\d{3}-\d{2,4}-\d{4,7}\b'
+    suggestion: "테스트면 더미값(110-000-000000) 사용. 운영이면 비공개 저장소로 분리."
+
+  - id: credit_card
+    severity: CRITICAL
+    description: "신용카드 번호 형식 (16자리)"
+    regex: '\b(?:4\d{3}|5[1-5]\d{2}|3[47]\d{2}|6011)[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'
+    suggestion: "PCI-DSS 위반 가능. 즉시 제거·로그 회수. 토큰화(tokenization) 후 저장."
+
+  - id: email_in_assignment
+    severity: LOW
+    description: "코드 안에 이메일 주소가 직접 할당됨 (실사용자일 가능성)"
+    regex: '[\w.+\-]+@[\w-]+\.[\w.-]+'
+    suggestion: "테스트면 'user@example.com' 권장. 실사용자 데이터는 fixture 로 분리."
+
+  # 로그·print 출력에 PII 가 섞일 가능성을 잡는 co-occur 룰.
+  # must_match: 로그/print 호출 + must_not_match: 마스킹 함수가 함께 보이지 않으면 의심.
+  - id: pii_in_log_print
+    severity: MED
+    description: "로그/print 출력에 user/email/phone 류 변수가 마스킹 없이 노출됨"
+    regex_co_occur:
+      must_match: '(?i)(?:logger?\.(?:info|debug|warning|error)|print)\s*\(.{0,200}(user_email|phone_number|rrn|주민번호|email|phone)'
+      must_not_match: '(mask|redact|sanitize|truncate)'
+    suggestion: "PII 를 포함한 로그는 mask_pii() 등 마스킹 헬퍼를 거쳐 출력."
+
+false_positive_excludes:
+  path_substrings:
+    - "/tests/"
+    - "/test/"
+    - "/__tests__/"
+    - "/fixtures/"
+    - "/examples/"
+    - "/CHANGELOG"
+    - "/docs/"

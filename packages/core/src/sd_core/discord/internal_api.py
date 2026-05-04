@@ -64,6 +64,10 @@ class InternalAPIServer:
         # secret 빈 문자열이면 401 처리하기 위해 환경변수 fallback 명시적 처리
         self.secret = secret if secret is not None else os.getenv("INTERNAL_API_SECRET", "")
         self._handlers: dict[str, HandlerFn] = {}
+        # 커스텀 라우트 훅 — argos_self_audit 의 GitHub webhook 처럼
+        # /api/invoke 외에 다른 엔드포인트를 같은 포트에 노출하고 싶을 때 사용.
+        # `_build_app` 시점에 FastAPI 앱이 인자로 전달된다.
+        self._route_hooks: list[Callable[[Any], None]] = []
         self._server: Any | None = None     # uvicorn.Server (런타임에 주입)
         self._task: asyncio.Task | None = None
         self._log = get_logger("sd_core.internal_api", bot_name=bot_name)
@@ -77,6 +81,18 @@ class InternalAPIServer:
         if action in self._handlers:
             raise ValueError(f"action '{action}' 이미 등록됨")
         self._handlers[action] = handler
+        return self
+
+    def add_route_hook(self, hook: Callable[[Any], None]) -> "InternalAPIServer":
+        """``_build_app`` 시점에 호출될 콜백 등록.
+
+        ``hook(app)`` 형태로 FastAPI 앱이 전달된다. 호출자는 ``app.add_api_route(...)`` 등으로
+        커스텀 엔드포인트를 자유롭게 추가할 수 있다 (예: GitHub webhook 수신).
+
+        주의: 이 훅은 ``/api/invoke`` 의 공유 시크릿 인증을 거치지 않는다.
+        외부 시스템(GitHub 등) 으로부터 받는 요청이라면 훅 내부에서 별도 인증을 구현할 것.
+        """
+        self._route_hooks.append(hook)
         return self
 
     # -----------------------------------------------------------------
@@ -169,6 +185,13 @@ class InternalAPIServer:
                 })
 
             return _normalize_result(raw)
+
+        # 커스텀 라우트 훅 — 호출자 봇이 자유롭게 엔드포인트 추가.
+        for hook in self._route_hooks:
+            try:
+                hook(app)
+            except Exception as exc:  # noqa: BLE001 — 훅 자체의 버그는 부팅을 막지 않게 경고만
+                self._log.warning("route_hook_failed", error=str(exc))
 
         return app
 

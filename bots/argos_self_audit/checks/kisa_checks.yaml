@@ -1,0 +1,116 @@
+# =====================================================================
+# KISA 가이드라인 핵심 체크 — 실무 위반 빈도가 높은 항목 위주.
+# 출처: KISA 「소프트웨어 개발보안 가이드」, 「암호 알고리즘 및 키 길이 이용 안내서」.
+# =====================================================================
+patterns:
+  - id: weak_hash_md5
+    severity: HIGH
+    description: "MD5 해시 함수 사용 — 충돌 공격에 취약 (KISA 가이드 § 암호 알고리즘)"
+    regex: '\b(?:hashlib\.md5|MD5\.new|crypto\.createHash\(["'']md5["''])\b'
+    suggestion: "SHA-256 이상 사용. 비밀번호는 bcrypt/argon2/PBKDF2."
+
+  - id: weak_hash_sha1
+    severity: MED
+    description: "SHA-1 해시 함수 사용 — 충돌 공격 입증됨 (사실상 deprecated)"
+    regex: '\b(?:hashlib\.sha1|SHA1\.new|crypto\.createHash\(["'']sha1["''])\b'
+    suggestion: "SHA-256 이상 사용."
+
+  - id: aes_ecb_mode
+    severity: HIGH
+    description: "AES ECB 모드 사용 — 패턴 노출 취약 (KISA 가이드 § 4.2)"
+    regex: '(?i)AES[._-]?(?:ECB|MODE_ECB)'
+    suggestion: "GCM(권장) 또는 CBC + HMAC 으로 전환."
+
+  - id: aes_cbc_without_hmac
+    severity: MED
+    description: "AES CBC 모드만 단독 사용 — padding oracle 위험. GCM 또는 CBC+HMAC 권장"
+    regex_co_occur:
+      must_match: '(?i)AES[._-]?(?:CBC|MODE_CBC)'
+      must_not_match: '(?i)(HMAC|GCM|MAC|integrity)'
+    suggestion: "GCM 모드로 전환하면 무결성·기밀성 동시 확보."
+
+  - id: deprecated_des_3des
+    severity: HIGH
+    description: "DES/3DES 사용 — KISA 권고 외 알고리즘"
+    regex: '(?i)\b(?:DES|TripleDES|3DES)\b'
+    suggestion: "AES-256-GCM 으로 교체."
+
+  - id: hardcoded_iv
+    severity: HIGH
+    description: "고정 IV(Initialization Vector) 사용 의심"
+    # 'iv = b"abcdef..."' 또는 'iv: bytes = b"..."' 형태
+    regex: '(?i)\biv\s*[:=]\s*(?:b?[''"][^''"]{8,32}[''"])'
+    suggestion: "IV 는 매 암호화마다 secrets.token_bytes() 등으로 새로 생성."
+
+  - id: insecure_random
+    severity: MED
+    description: "보안 맥락에서 random.* 사용 의심 — 토큰/세션ID 는 secrets 모듈 사용"
+    regex_co_occur:
+      must_match: '(?i)\b(?:token|session_id|api_key|otp|nonce)\b.{0,80}\b(?:random\.(?:random|randint|choice|sample))'
+      must_not_match: 'secrets\.(?:token|choice)'
+    suggestion: "secrets.token_urlsafe() / secrets.token_bytes() 사용."
+
+  - id: sql_string_concat
+    severity: HIGH
+    description: "SQL 쿼리 문자열 연결 — SQL Injection 위험 (KISA 가이드 § SQL Injection)"
+    regex: '(?i)(?:execute|cursor\.execute|query)\s*\(\s*["''](?:[^"'']*?)\b(?:SELECT|INSERT|UPDATE|DELETE)\b[^"'']*\+[^)]*\)'
+    suggestion: "parametrized query (cursor.execute(sql, params)) 또는 ORM 사용."
+
+  - id: subprocess_shell_true
+    severity: HIGH
+    description: "subprocess shell=True 사용 — 명령어 인젝션 위험"
+    regex: '\bsubprocess\.(?:run|call|Popen|check_output)\s*\([^)]*shell\s*=\s*True'
+    suggestion: "shell=False (기본) 로 두고 args 를 list 형태로 전달."
+
+  - id: yaml_unsafe_load
+    severity: HIGH
+    description: "yaml.load() 사용 — 임의 객체 역직렬화 RCE"
+    regex: '\byaml\.load\s*\((?![^)]*Loader\s*=\s*(?:yaml\.SafeLoader|SafeLoader))'
+    suggestion: "yaml.safe_load() 로 교체."
+
+  - id: pickle_load_external
+    severity: HIGH
+    description: "pickle.load 외부 데이터 역직렬화 — RCE 위험"
+    regex: '\bpickle\.loads?\s*\('
+    suggestion: "외부 입력은 JSON 등 안전 포맷으로. 내부 신뢰 가능 데이터에만 pickle 사용."
+
+  - id: http_url_fetch
+    severity: MED
+    description: "http:// URL 직접 호출 — TLS 미적용 가능"
+    regex: '(?i)(?:requests|httpx|urllib).*\(["'']http://(?!localhost|127\.0\.0\.1|0\.0\.0\.0)'
+    suggestion: "https:// 로 전환. 내부 호출이면 IP/호스트 화이트리스트로 추가 검증."
+
+  - id: jwt_none_alg
+    severity: CRITICAL
+    description: "JWT 'none' 알고리즘 허용 — 서명 우회 가능"
+    regex: '(?i)(?:algorithms?|alg)\s*[:=]\s*[''"]none[''"]'
+    suggestion: "HS256/RS256 등 명시 알고리즘만 허용 목록에 추가."
+
+  - id: cors_wildcard
+    severity: MED
+    description: "CORS allow_origins='*' + allow_credentials=True 동시 설정 — 자격증명 누출"
+    regex_co_occur:
+      must_match: '(?i)allow_origins\s*=\s*\[?\s*["''][*]["'']'
+      must_not_match: '(?i)allow_credentials\s*=\s*False'
+    suggestion: "구체 origin 화이트리스트로 변경."
+
+# 레거시 코드 탐지 — 경로 기반 휴리스틱.
+# repo_scanner._scan_legacy 가 이 목록을 사용해 매치되는 디렉토리·파일을 finding 으로 보고.
+legacy_paths:
+  - "src/legacy/"
+  - "src/old/"
+  - "src/deprecated/"
+  - "_old.py"
+  - "_deprecated.py"
+  - "_v1.py"
+  - "TODO_REMOVE"
+
+false_positive_excludes:
+  path_substrings:
+    - "/tests/"
+    - "/test/"
+    - "/__tests__/"
+    - "/fixtures/"
+    - "/examples/"
+    - "/docs/"
+    - "/CHANGELOG"

@@ -1,0 +1,15 @@
+# =====================================================================
+# Argos Self-Audit — Railway 서비스 설정
+# =====================================================================
+# 외부에 노출되는 PORT 1개에서 ① cos 위임용 /api/invoke
+#                                  ② GitHub PR webhook /webhook/github
+# 를 모두 처리한다 (FastAPI 라우트 훅으로 합침).
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "bots/argos_self_audit/Dockerfile"
+
+[deploy]
+startCommand = "uv run python -m argos_self_audit.main"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

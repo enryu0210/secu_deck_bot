@@ -41,6 +41,8 @@ _ACTION_INTRO: dict[str, str] = {
     "design_check":      "DS 일관성 검사로 연결합니다.",
     "design_spec":       "개발 핸드오프용 spec 문서를 만들어 드릴게요.",
     "design_copy":       "UX 카피 검토로 연결합니다.",
+    "audit_scan":        "Argos 레포 즉시 자가 점검을 실행할게요 (룰베이스, LLM 미호출).",
+    "audit_feature":     "PRD 키워드 기반으로 관련 법령을 매핑해 드릴게요 (룰베이스, LLM 미호출).",
 }
 
 

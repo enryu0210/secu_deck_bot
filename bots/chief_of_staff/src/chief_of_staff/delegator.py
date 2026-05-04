@@ -139,6 +139,23 @@ class Delegator:
                 )
             return payload
 
+        if action == "audit_scan":
+            # 별도 페이로드 불필요 — 봇이 ARGOS_REPO_URL 기준으로 스캔.
+            return payload
+
+        if action == "audit_feature":
+            # PRD 텍스트는 첨부 .md/.txt 도 허용. 첨부 없으면 메시지 본문 사용.
+            await self._fill_document_text(payload, message, clean_text)
+            # _fill_document_text 는 document_text 키에 채우므로 prd_text 로 옮김.
+            if "prd_text" not in payload and "document_text" in payload:
+                payload["prd_text"] = payload.pop("document_text")
+            if not payload.get("prd_text"):
+                raise SecuDeckError(
+                    "prd_text 비어 있음",
+                    user_message="법령 매핑할 PRD 본문을 메시지로 보내거나 .md/.txt 파일을 첨부해 주세요.",
+                )
+            return payload
+
         # 알 수 없는 action — IntentRouter 카탈로그와 동기화 누락 가능.
         raise SecuDeckError(
             f"Delegator 가 모르는 action: {action}",
