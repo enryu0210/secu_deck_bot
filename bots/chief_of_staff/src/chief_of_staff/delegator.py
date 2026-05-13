@@ -5,8 +5,12 @@
 - IntentRouter 가 채운 ``params`` 를 봇 internal_handlers 가 기대하는 키로 보강.
 - ``InternalAPIClient.invoke`` 호출 후 결과 dict 반환.
 
-PDF/DOCX 같은 바이너리 문서 파싱은 cos 가 떠안지 않는다 — 의존성 폭발 회피.
-사용자가 PDF 를 첨부했는데 cos 로 라우팅하면, 안내 메시지로 ``/pitch`` 슬래시 커맨드를 권유.
+PDF/DOCX 파싱 정책:
+- cos 자체에는 pypdf / python-docx 의존성을 두지 않는다 (의존성 폭발 회피).
+- 대신 첨부 bytes 를 base64 로 인코딩해 위임 봇(pitch_sharpener)에 그대로 넘기고,
+  파싱은 pitch 봇이 이미 보유한 ``DocumentParser`` 에 맡긴다.
+- 이렇게 하면 사용자는 @cos 멘션에 PDF 를 그대로 던질 수 있으면서도 cos 컨테이너의
+  의존성은 가볍게 유지된다.
 """
 from __future__ import annotations
 
@@ -35,6 +39,9 @@ _BINARY_DOC_EXTS = {".pdf", ".docx"}
 
 # 텍스트 첨부 최대 크기 (디스코드 일반 첨부 8MB 한계 대비 LLM 입력에 안전한 600KB)
 _MAX_TEXT_BYTES = 600 * 1024
+# 바이너리 문서(PDF/DOCX) 위임 시 base64 직전 원본 크기 상한.
+# pitch 봇의 DocumentParser._MAX_ATTACHMENT_BYTES 와 맞춰서 결정 — 20MB.
+_MAX_DOC_BYTES = 20 * 1024 * 1024
 
 
 class Delegator:
@@ -171,31 +178,48 @@ class Delegator:
         message: discord.Message,
         fallback_text: str,
     ) -> None:
-        """텍스트 첨부 → document_text. PDF/DOCX 는 명시 거부."""
+        """문서 첨부 → document_text 또는 document_bytes.
+
+        우선순위:
+        1) payload 에 이미 document_text 가 있으면 그대로 사용 (LLM 분류 결과 보존).
+        2) 첨부에 .md/.txt 가 있으면 즉시 디코딩해 document_text 로 세팅.
+        3) 첨부에 .pdf/.docx 가 있으면 bytes 를 base64 로 인코딩해 document_bytes 로 전달.
+           파싱은 위임 봇(pitch_sharpener) 의 DocumentParser 가 담당.
+        4) 모두 없으면 메시지 본문(fallback_text) 을 document_text 로 사용.
+        """
         if payload.get("document_text"):
             return
 
+        # 1순위 — 텍스트 파일은 그 자리에서 디코딩 (LLM 입력 토큰 절약 + 단순).
         for att in message.attachments:
             name = (att.filename or "").lower()
-            if any(name.endswith(ext) for ext in _BINARY_DOC_EXTS):
-                # PDF/DOCX 는 cos 에서 파싱하지 않음 — 슬래시 커맨드 안내.
-                raise SecuDeckError(
-                    "cos 는 PDF/DOCX 파싱을 지원하지 않음",
-                    user_message=(
-                        "PDF·DOCX 사업계획서는 `/pitch quick` 또는 `/pitch review` 슬래시 커맨드로 "
-                        "직접 첨부해 주세요. (cos 라우팅으로는 텍스트만 처리해요)"
-                    ),
-                )
             if any(name.endswith(ext) for ext in _TEXT_EXTS):
                 raw = await att.read()
                 payload["document_text"] = _decode_text(raw)
                 return
 
-        # 첨부에 텍스트 없으면 메시지 본문 사용
+        # 2순위 — PDF/DOCX 는 bytes 그대로 위임. cos 에 pypdf/docx 의존성 없음.
+        for att in message.attachments:
+            name = (att.filename or "").lower()
+            if any(name.endswith(ext) for ext in _BINARY_DOC_EXTS):
+                if att.size > _MAX_DOC_BYTES:
+                    raise SecuDeckError(
+                        f"문서 첨부가 너무 큼: {att.size} bytes",
+                        user_message="문서가 너무 커요 (20MB 이하만 지원). 본문만 추출해 다시 보내 주세요.",
+                    )
+                raw = await att.read()
+                payload["document_bytes"] = base64.b64encode(raw).decode("ascii")
+                # 위임 봇이 확장자로 파서를 고를 수 있도록 파일명도 함께 전달.
+                payload["document_filename"] = att.filename or name
+                return
+
+        # 3순위 — 첨부에 텍스트/문서 둘 다 없으면 메시지 본문 사용.
         if not fallback_text:
             raise SecuDeckError(
                 "document_text 와 첨부 모두 없음",
-                user_message="진단할 사업계획서 본문을 메시지로 보내거나 .md/.txt 파일을 첨부해 주세요.",
+                user_message=(
+                    "진단할 사업계획서 본문을 메시지로 보내거나 PDF/DOCX/MD/TXT 파일을 첨부해 주세요."
+                ),
             )
         payload["document_text"] = fallback_text
 
