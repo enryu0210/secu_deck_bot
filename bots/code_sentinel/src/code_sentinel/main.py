@@ -6,7 +6,8 @@
 환경변수:
     DISCORD_BOT_TOKEN_CODE (필수)
     ANTHROPIC_API_KEY (필수)
-    GITHUB_PAT (선택, private repo PR 처리 시 필수)
+    GITHUB_PAT (선택, private repo PR/브랜치 처리 시 필수)
+    CODE_SENTINEL_DEFAULT_REPO (선택, ``owner/repo`` 형식 — /code branch · /code branch_full 에서 repo 옵션 생략 시 fallback)
     DISCORD_GUILD_ID (선택)
     COST_MONTHLY_LIMIT_KRW_CODE (선택)
 """
