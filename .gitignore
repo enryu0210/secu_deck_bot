@@ -36,6 +36,7 @@ build/
 .claude/
 .vscode/
 .idea/
+.serena/    # Serena MCP 작업 메타 (개인 환경별, 외부 공유 불필요)
 
 # --- 시안·이미지 자산 (디자인팀 작업물 별도 보관) ---
 *.png
