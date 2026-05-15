@@ -340,6 +340,11 @@ class IntentRouter:
         # 일정/스케줄 키워드 — 첨부 없는 경우만 (첨부 있으면 다른 봇이 우선).
         # "인터뷰 스케줄" 같이 _INTERVIEW_HINTS 가 함께 잡히는 경우 LLM 위임.
         if _SCHEDULE_HINTS.search(text) and not _INTERVIEW_HINTS.search(text):
+            # 0) "등록/추가/잡아줘/만들어줘" — title 파싱이 LLM 영역이므로 모든 날짜/조회 룰보다
+            #    먼저 평가해 LLM 위임. 그러지 않으면 "6월 19일 ... 등록해줘" 같이 등록+날짜가
+            #    동시에 오는 케이스에서 _DATE_KR_RE 가 먼저 잡아 schedule_search 로 오라우팅됨.
+            if _SCHEDULE_REGISTER_HINTS.search(text):
+                return None
             # 1) "오늘 일정" → schedule_today
             if _SCHEDULE_TODAY_HINTS.search(text):
                 return Intent(
@@ -397,10 +402,8 @@ class IntentRouter:
                     confidence=0.8,
                     source="rule",
                 )
-            # 5) "등록/추가/잡아줘" — title/date 파싱이 필요하므로 LLM 위임.
-            if _SCHEDULE_REGISTER_HINTS.search(text):
-                return None
             # 일정 키워드만 있고 액션 불명 → LLM 위임 (의도 파악 부족)
+            # (등록 의도는 위 0) 단계에서 이미 LLM 으로 위임됨)
             return None
 
         # 강한 인터뷰 키워드
