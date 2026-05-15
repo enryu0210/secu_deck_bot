@@ -40,7 +40,7 @@ class InternalAPIClient:
     def _read_urls_from_env() -> dict[str, str]:
         """``BOT_URL_<SUFFIX>`` 환경변수에서 봇별 URL 읽기.
 
-        suffix 는 cost.py 의 suffix_map 과 동일 — PITCH/CODE/INTERVIEW/DESIGN/AUDIT.
+        suffix 는 cost.py 의 suffix_map 과 동일 — PITCH/CODE/INTERVIEW/DESIGN/AUDIT/SCHEDULE.
         URL 미설정 봇은 dict 에 포함시키지 않음 → 호출 시 ConfigError.
         """
         mapping = {
@@ -49,6 +49,7 @@ class InternalAPIClient:
             "interview_companion": os.getenv("BOT_URL_INTERVIEW"),
             "design_echo": os.getenv("BOT_URL_DESIGN"),
             "argos_self_audit": os.getenv("BOT_URL_AUDIT"),
+            "schedule_bot": os.getenv("BOT_URL_SCHEDULE"),
         }
         return {k: v for k, v in mapping.items() if v}
 

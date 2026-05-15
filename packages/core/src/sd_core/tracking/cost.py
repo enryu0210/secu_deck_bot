@@ -106,6 +106,7 @@ class CostTracker:
             "design_echo": "DESIGN",
             "chief_of_staff": "COS",
             "argos_self_audit": "AUDIT",
+            "schedule_bot": "SCHEDULE",
         }
         suffix = suffix_map.get(bot_name, bot_name.upper())
         return float(os.getenv(f"COST_MONTHLY_LIMIT_KRW_{suffix}", "50000"))
