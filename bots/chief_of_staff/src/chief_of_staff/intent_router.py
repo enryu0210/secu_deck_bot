@@ -109,9 +109,13 @@ _BRANCH_HINTS = re.compile(
     r"(브랜치|branch|feature/[\w\-./]+|hotfix/[\w\-./]+|bugfix/[\w\-./]+|fix/[\w\-./]+|release/[\w\-./]+|exp/[\w\-./]+)",
     re.IGNORECASE,
 )
-# 명시적 브랜치명 캡처 — prefix-style 만 (자유형 브랜치명은 LLM 으로 위임).
+# 명시적 브랜치명 캡처 — prefix-style + 흔한 단순 브랜치명 화이트리스트.
+# 단순 브랜치명은 영어 일반 단어와 충돌 위험이 있어 의미 충돌이 적은 것만 화이트리스트:
+# develop/main/master/staging/prod/production/qa/beta/preview. ("dev"/"test" 는 너무 일반적이라 제외)
 _BRANCH_NAME_RE = re.compile(
-    r"(feature/[\w\-./]+|hotfix/[\w\-./]+|bugfix/[\w\-./]+|fix/[\w\-./]+|release/[\w\-./]+|exp/[\w\-./]+)",
+    r"(feature/[\w\-./]+|hotfix/[\w\-./]+|bugfix/[\w\-./]+|fix/[\w\-./]+|release/[\w\-./]+|exp/[\w\-./]+|"
+    r"\b(?:develop|main|master|staging|prod|production|qa|beta|preview)\b)",
+    re.IGNORECASE,
 )
 # "전체/통째/모든 파일/스냅샷" — 스냅샷 강한 키워드.
 _BRANCH_FULL_HINTS = re.compile(
@@ -122,6 +126,13 @@ _BRANCH_FULL_HINTS = re.compile(
 _BRANCH_DIFF_HINTS = re.compile(
     r"(변경.?사항|차이.?점|diff|main\s*대비|base\s*대비|PR\s*전|미리\s*리뷰|"
     r"어떻게\s*바뀌|뭐가\s*달라|달라진\s*점|어떤\s*변경)",
+    re.IGNORECASE,
+)
+# 일반 리뷰 액션 동사 — "<브랜치명> 리뷰해줘" 같이 분리 키워드 없이도 의도 명확한 경우.
+# _BRANCH_HINTS + _BRANCH_NAME_RE 매치된 컨텍스트에서만 발동하므로 오탐 위험 낮음.
+# 매칭 시 code_branch_diff (안전·저비용 기본값) 로 라우팅.
+_BRANCH_REVIEW_VERB = re.compile(
+    r"(리뷰|검토|봐\s*줘|봐주세요|분석|체크|점검|훑어|살펴|평가|review)",
     re.IGNORECASE,
 )
 # self-audit 즉시 스캔을 명시적으로 부르는 키워드 ("자가 검증" / "self-audit" / "전체 스캔" / "리포지토리 스캔")
@@ -219,16 +230,21 @@ class IntentRouter:
             )
 
         # 브랜치 리뷰 트리거 — 코드 첨부/이미지 없을 때만.
-        # diff vs snapshot 명시적 키워드 둘 다 검사:
-        #   - SNAPSHOT 키워드 있음 → code_branch_snapshot (비용 큼, 사용자가 명시적으로 요청한 경우만)
-        #   - DIFF 키워드 있음    → code_branch_diff (안전·저비용 기본값)
-        #   - 브랜치 키워드만 있고 어느 쪽도 없음 → LLM 위임 (의도 모호)
+        # diff vs snapshot 명시적 키워드 + 일반 리뷰 동사 3단 검사:
+        #   - SNAPSHOT 키워드 → code_branch_snapshot (비용 큼, 명시 요청 시만)
+        #   - DIFF 키워드     → code_branch_diff (안전·저비용)
+        #   - 일반 리뷰 동사  → code_branch_diff (default, low confidence)
+        #   - 브랜치 키워드만, 동사도 없음 → LLM 위임
         # 명시적 키워드 충돌 시 SNAPSHOT 우선 — 사용자가 명확히 적은 표현이므로.
+        # 단, brranch 이름 추출 실패하면 룰 전체 포기 — 핸들러가 'branch 누락' 에러
+        # 던지느니 LLM 이 자유형 브랜치명을 추출하도록 위임.
         if _BRANCH_HINTS.search(text) and not (has_ext(_CODE_EXTS) or has_image()):
-            branch_params: dict[str, Any] = {}
             branch_match = _BRANCH_NAME_RE.search(text)
-            if branch_match:
-                branch_params["branch"] = branch_match.group(1)
+            # branch 못 잡으면 룰 신뢰도 낮음 → LLM 위임. 핸들러까지 가서 에러 던지는 것 방지.
+            if not branch_match:
+                return None
+
+            branch_params: dict[str, Any] = {"branch": branch_match.group(1)}
             if _SECURITY_HINTS.search(text):
                 branch_params["focus"] = "security"
 
@@ -250,7 +266,18 @@ class IntentRouter:
                     params=branch_params,
                     source="rule",
                 )
-            # 브랜치 의도는 있는데 diff/snapshot 불명 → LLM 위임 (강제 default 피함)
+            # diff/snapshot 분리 키워드는 없지만 '리뷰/분석/봐줘' 같은 일반 동사 있음 →
+            # 안전한 default 로 diff. confidence 낮춰 cos 가 "맞나요?" 톤으로 안내하게.
+            if _BRANCH_REVIEW_VERB.search(text):
+                return Intent(
+                    bot="code_sentinel",
+                    action="code_branch_diff",
+                    reason="브랜치명 + 일반 리뷰 동사 → diff default",
+                    confidence=0.6,
+                    params=branch_params,
+                    source="rule",
+                )
+            # 브랜치 의도는 있는데 어느 동사도 없음 → LLM 위임 (강제 default 피함)
             return None
 
         # 명시적 KISA/컴플라이언스 — 코드 첨부 없으면 PRD 매핑(audit_feature) 으로 위임.
@@ -507,8 +534,12 @@ class IntentRouter:
             "- `code_branch_snapshot` (비용 큼, 명시 요청일 때만): 사용자가 '전체', '통째', '모든 파일',",
             "  '스냅샷', '브랜치 자체', '브랜치 전부' 같이 **브랜치 전체를 통째로 보고 싶다**고 명시할 때만.",
             "- 어느 쪽인지 모호하면 항상 `code_branch_diff` (저비용·안전). snapshot 은 명백한 신호가 있을 때만.",
-            "- 두 액션 모두 `params.branch` 는 필수. 사용자가 'feature/auth-rework' 같이 명시했다면 그대로,",
-            "  '내 작업 브랜치' 같이 모호하면 self 로 보내 cos 가 브랜치명을 되묻게 할 것.",
+            "- **중요**: 사용자가 브랜치명(`develop`, `main`, `master`, `staging`, `feature/...`, `hotfix/...` 등)을",
+            "  명시하면서 '리뷰/검토/봐줘/분석/체크/점검/평가/review' 같은 일반 액션을 요청하면 → 무조건",
+            "  `code_branch_diff` (default). 절대 self 로 보내지 말 것. 'Code Sentinel 한테 부탁하세요' 같은",
+            "  안내 답변을 만들지 말 것 — 위임이 본 봇의 책임이다.",
+            "- 두 액션 모두 `params.branch` 는 필수. 사용자가 'develop' 같이 짧게 명시했어도 그대로 채울 것.",
+            "  '내 작업 브랜치' 처럼 진짜로 브랜치명이 안 보일 때만 self 로 되묻기 허용.",
             "- `params.repo` 는 'owner/repo' 형식만. 명시되지 않으면 비워둔다(default 환경변수로 fallback).",
             "- 보안 단어('보안/취약/PII' 등)가 함께 있으면 `params.focus='security'`.",
             "- 단순 코드 본문 첨부/붙여넣기(브랜치 아님) → `code_review` 로. 둘을 절대 섞지 말 것.",
