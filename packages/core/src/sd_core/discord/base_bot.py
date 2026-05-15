@@ -43,8 +43,11 @@ class SecuDeckBot(commands.Bot):
         sync_guild_id: int | None = None,
     ):
         if intents is None:
+            # 기본은 슬래시 커맨드 전용 봇 — Privileged Intent(message_content) 미요청.
+            # 메시지 본문을 읽어야 하는 봇(cos 등)은 main.py 에서 ``intents`` 를
+            # 직접 구성해 생성자에 주입해야 한다. 그러지 않으면 Discord 가
+            # PrivilegedIntentsRequired 를 던지고 봇이 부팅하지 못한다.
             intents = discord.Intents.default()
-            intents.message_content = True
 
         # command_prefix 는 슬래시 커맨드 위주이지만 명시적 설정 필요
         super().__init__(command_prefix="!", intents=intents, help_command=None)
