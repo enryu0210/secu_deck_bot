@@ -1,0 +1,14 @@
+# =====================================================================
+# Schedule Bot — Railway 서비스 설정
+# =====================================================================
+# 외부에 노출되는 PORT 에서 cos 위임용 /api/invoke 를 제공한다.
+# SQLite 파일 영속을 위해 Volume(/app/data) 마운트 + SCHEDULE_DB_PATH=/app/data/schedules.db 설정 권장.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "bots/schedule_bot/Dockerfile"
+
+[deploy]
+startCommand = "uv run python -m schedule_bot.main"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "schedule-bot"
+version = "0.1.0"
+description = "팀 일정 관리 봇 — 등록·조회·30분 전 자동 알림 (LLM 미사용)"
+requires-python = ">=3.12"
+
+# 옵션 B: LLM 호출 없음. anthropic SDK 의존성은 sd-core 안에 있고 lazy import 라 부팅 무해.
+# SQLite (표준 라이브러리) 만으로 영속 저장 → 추가 DB 의존성 불필요.
+dependencies = [
+    "sd-core",
+    "discord.py>=2.4",
+    "python-dotenv>=1.0",
+    # cos 위임용 internal API
+    "fastapi>=0.110",
+    "uvicorn>=0.30",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/schedule_bot"]
