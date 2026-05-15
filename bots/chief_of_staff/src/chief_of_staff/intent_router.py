@@ -46,11 +46,15 @@ ROUTABLE_ACTIONS: dict[tuple[str, str], str] = {
     ("pitch_sharpener", "pitch_focus"):
         "사업계획서 단일 페르소나 깊이 리뷰. params.persona_id 권장 (customer_voice / data_skeptic / pricing_analyst / competitor_hunter / tech_differentiator / budget_reality).",
     ("code_sentinel", "code_review"):
-        "코드 리뷰. params.language(자동감지 가능), params.focus='security'면 보안 중심.",
+        "코드 본문(텍스트/첨부) 리뷰. params.language(자동감지 가능), params.focus='security'면 보안 중심. 브랜치 단위가 아닐 때만.",
     ("code_sentinel", "code_test"):
         "코드의 단위 테스트 자동 생성.",
     ("code_sentinel", "code_kisa"):
         "신규 기능 설명 → KISA·개인정보보호법 정합성 점검. params.feature_description 필수.",
+    ("code_sentinel", "code_branch_diff"):
+        "GitHub 브랜치 ↔ base diff 리뷰 — 사용자가 '변경된 부분/diff/main 대비/달라진' 같이 '차이'를 강조할 때. params.branch 필수, params.repo·params.base 선택.",
+    ("code_sentinel", "code_branch_snapshot"):
+        "GitHub 브랜치 전체 코드 통째 리뷰 — 사용자가 '전체/통째/모든 파일/스냅샷' 같이 '브랜치 자체'를 강조할 때만 (비용 큼). params.branch 필수, params.repo 선택.",
     ("interview_companion", "interview_prep"):
         "고객 인터뷰 가이드 생성. params={name, role, company, company_size, background?, focus_ids?} 필요.",
     ("interview_companion", "interview_insight"):
@@ -94,6 +98,32 @@ _INTERVIEW_HINTS = re.compile(r"(인터뷰|고객.*페인|누적.*분석|고객 
 _COPY_HINTS = re.compile(r"(카피|문구|버튼.*텍스트|CTA|마이크로카피|문장.*톤)", re.IGNORECASE)
 _DESIGN_SPEC_HINTS = re.compile(r"(spec|핸드오프|개발자에게|토큰.*추출)", re.IGNORECASE)
 _SECURITY_HINTS = re.compile(r"(보안|취약|injection|XSS|CSRF|PII|민감.*정보)", re.IGNORECASE)
+
+# ---------------------------------------------------------------------
+# 브랜치 리뷰 트리거 — diff vs snapshot 을 명확히 분리.
+# 같은 메시지에 두 신호가 모두 잡히면 SNAPSHOT 이 더 명시적 표현이므로 우선.
+# 그 외엔 DIFF 가 안전·저비용 기본값.
+# ---------------------------------------------------------------------
+# "브랜치/branch 또는 흔한 브랜치 prefix" — 브랜치 의도 자체를 잡는 1차 신호.
+_BRANCH_HINTS = re.compile(
+    r"(브랜치|branch|feature/[\w\-./]+|hotfix/[\w\-./]+|bugfix/[\w\-./]+|fix/[\w\-./]+|release/[\w\-./]+|exp/[\w\-./]+)",
+    re.IGNORECASE,
+)
+# 명시적 브랜치명 캡처 — prefix-style 만 (자유형 브랜치명은 LLM 으로 위임).
+_BRANCH_NAME_RE = re.compile(
+    r"(feature/[\w\-./]+|hotfix/[\w\-./]+|bugfix/[\w\-./]+|fix/[\w\-./]+|release/[\w\-./]+|exp/[\w\-./]+)",
+)
+# "전체/통째/모든 파일/스냅샷" — 스냅샷 강한 키워드.
+_BRANCH_FULL_HINTS = re.compile(
+    r"(브랜치\s*전체|전체\s*리뷰|통째|모든\s*파일|스냅샷|snapshot|full\s*review|whole\s*branch)",
+    re.IGNORECASE,
+)
+# "변경/diff/차이/main 대비/달라진" — diff 강한 키워드.
+_BRANCH_DIFF_HINTS = re.compile(
+    r"(변경.?사항|차이.?점|diff|main\s*대비|base\s*대비|PR\s*전|미리\s*리뷰|"
+    r"어떻게\s*바뀌|뭐가\s*달라|달라진\s*점|어떤\s*변경)",
+    re.IGNORECASE,
+)
 # self-audit 즉시 스캔을 명시적으로 부르는 키워드 ("자가 검증" / "self-audit" / "전체 스캔" / "리포지토리 스캔")
 _AUDIT_SCAN_HINTS = re.compile(
     r"(self.?audit|자가.?검증|자가.?점검|레포.*스캔|repo.*scan|argos 점검|전체 점검)",
@@ -187,6 +217,41 @@ class IntentRouter:
                 confidence=0.85,
                 source="rule",
             )
+
+        # 브랜치 리뷰 트리거 — 코드 첨부/이미지 없을 때만.
+        # diff vs snapshot 명시적 키워드 둘 다 검사:
+        #   - SNAPSHOT 키워드 있음 → code_branch_snapshot (비용 큼, 사용자가 명시적으로 요청한 경우만)
+        #   - DIFF 키워드 있음    → code_branch_diff (안전·저비용 기본값)
+        #   - 브랜치 키워드만 있고 어느 쪽도 없음 → LLM 위임 (의도 모호)
+        # 명시적 키워드 충돌 시 SNAPSHOT 우선 — 사용자가 명확히 적은 표현이므로.
+        if _BRANCH_HINTS.search(text) and not (has_ext(_CODE_EXTS) or has_image()):
+            branch_params: dict[str, Any] = {}
+            branch_match = _BRANCH_NAME_RE.search(text)
+            if branch_match:
+                branch_params["branch"] = branch_match.group(1)
+            if _SECURITY_HINTS.search(text):
+                branch_params["focus"] = "security"
+
+            if _BRANCH_FULL_HINTS.search(text):
+                return Intent(
+                    bot="code_sentinel",
+                    action="code_branch_snapshot",
+                    reason="브랜치 + 전체/스냅샷 키워드",
+                    confidence=0.85,
+                    params=branch_params,
+                    source="rule",
+                )
+            if _BRANCH_DIFF_HINTS.search(text):
+                return Intent(
+                    bot="code_sentinel",
+                    action="code_branch_diff",
+                    reason="브랜치 + 변경/diff 키워드",
+                    confidence=0.85,
+                    params=branch_params,
+                    source="rule",
+                )
+            # 브랜치 의도는 있는데 diff/snapshot 불명 → LLM 위임 (강제 default 피함)
+            return None
 
         # 명시적 KISA/컴플라이언스 — 코드 첨부 없으면 PRD 매핑(audit_feature) 으로 위임.
         # Code Sentinel 의 code_kisa 와 달리 LLM 비용 0 이라 일상 질문에 적합.
@@ -435,6 +500,18 @@ class IntentRouter:
             "- 시간은 `HH:MM` 24시간 형식. '오후 2시', '14시' 모두 `14:00`.",
             "- schedule_register 시 title 은 일정 핵심 명사구만 (예: '팀 회의'). 메시지 전체 복사 금지.",
             "- guild_id 는 절대 LLM 이 채우지 말 것 — cos delegator 가 디스코드 컨텍스트에서 자동 주입.",
+            "",
+            "## code_sentinel 브랜치 리뷰 액션 구분 (혼동 주의)",
+            "- `code_branch_diff` (안전·저비용 기본값): 사용자가 '변경', '변경사항', 'diff', '차이', 'main 대비',",
+            "  '달라진 부분', 'PR 전에 봐줘', '뭐가 바뀌었는지' 같이 **차이/변경 자체**를 강조할 때.",
+            "- `code_branch_snapshot` (비용 큼, 명시 요청일 때만): 사용자가 '전체', '통째', '모든 파일',",
+            "  '스냅샷', '브랜치 자체', '브랜치 전부' 같이 **브랜치 전체를 통째로 보고 싶다**고 명시할 때만.",
+            "- 어느 쪽인지 모호하면 항상 `code_branch_diff` (저비용·안전). snapshot 은 명백한 신호가 있을 때만.",
+            "- 두 액션 모두 `params.branch` 는 필수. 사용자가 'feature/auth-rework' 같이 명시했다면 그대로,",
+            "  '내 작업 브랜치' 같이 모호하면 self 로 보내 cos 가 브랜치명을 되묻게 할 것.",
+            "- `params.repo` 는 'owner/repo' 형식만. 명시되지 않으면 비워둔다(default 환경변수로 fallback).",
+            "- 보안 단어('보안/취약/PII' 등)가 함께 있으면 `params.focus='security'`.",
+            "- 단순 코드 본문 첨부/붙여넣기(브랜치 아님) → `code_review` 로. 둘을 절대 섞지 말 것.",
             "",
             *catalog_lines,
         ])

@@ -36,6 +36,8 @@ _ACTION_INTRO: dict[str, str] = {
     "code_review":       "코드 리뷰로 연결합니다.",
     "code_test":         "단위 테스트 자동 생성으로 연결합니다.",
     "code_kisa":         "KISA·개인정보보호법 정합성 점검으로 연결합니다.",
+    "code_branch_diff":  "선택하신 브랜치의 변경분(base 대비 diff)을 리뷰할게요.",
+    "code_branch_snapshot": "브랜치 전체 코드를 통째로 리뷰할게요. (비용이 다소 큽니다)",
     "interview_prep":    "고객 인터뷰 가이드를 준비해 볼게요.",
     "interview_insight": "누적된 인터뷰를 다시 분석해 인사이트를 정리해 드릴게요.",
     "design_check":      "DS 일관성 검사로 연결합니다.",

@@ -55,12 +55,14 @@ async def _async_main() -> None:
     fetcher = GitHubFetcher()
     install_commands(bot, reviewer, fetcher)
 
-    # cos 위임용 내부 API.
-    handlers = CodeInternalHandlers(reviewer)
+    # cos 위임용 내부 API. fetcher 는 브랜치 액션에서만 사용하지만 핸들러에 함께 주입.
+    handlers = CodeInternalHandlers(reviewer, fetcher)
     api = InternalAPIServer(bot_name="code_sentinel")
     api.register("code_review", handlers.code_review)
     api.register("code_test", handlers.code_test)
     api.register("code_kisa", handlers.code_kisa)
+    api.register("code_branch_diff", handlers.code_branch_diff)
+    api.register("code_branch_snapshot", handlers.code_branch_snapshot)
 
     _log.info(
         "starting_code_sentinel",

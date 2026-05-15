@@ -80,6 +80,17 @@ class BranchDiff:
     changed_files: list[str]
     ahead_by: int        # base 대비 앞선 커밋 수 (참고용)
 
+    def to_review_prompt(self) -> str:
+        """리뷰 LLM 에 넣을 markdown 본문 — commands·internal_handlers 공용."""
+        return (
+            f"# {self.repo} — `{self.base}` ... `{self.branch}` "
+            f"(ahead {self.ahead_by} commits)\n\n"
+            f"## 변경 파일 ({len(self.changed_files)})\n"
+            + "\n".join(f"- {f}" for f in self.changed_files)
+            + "\n\n## diff\n"
+            + self.diff
+        )
+
 
 @dataclass
 class FileBlob:
@@ -99,6 +110,18 @@ class BranchSnapshot:
     # 상한(파일 수·총 바이트)에 걸려 일부 누락되었는지 — UI 에 경고 노출용
     truncated: bool = False
     total_bytes: int = 0
+
+    def to_review_prompt(self) -> str:
+        """리뷰 LLM 에 넣을 markdown 본문 (파일 블록 결합) — commands·internal_handlers 공용."""
+        head = (
+            f"# {self.repo} — branch `{self.branch}` 스냅샷\n"
+            f"파일 {len(self.files)}개, 총 {self.total_bytes:,}바이트"
+            f"{' (일부 절단됨)' if self.truncated else ''}\n\n"
+        )
+        blocks: list[str] = [head]
+        for blob in self.files:
+            blocks.append(f"## file: {blob.path}\n```\n{blob.content}\n```\n")
+        return "\n".join(blocks)
 
 
 class GitHubFetchError(SecuDeckError):

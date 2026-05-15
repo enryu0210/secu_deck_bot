@@ -115,6 +115,19 @@ class Delegator:
                 )
             return payload
 
+        if action in ("code_branch_diff", "code_branch_snapshot"):
+            # IntentRouter 가 channels/params 에 채운 branch/repo/base/focus 를 그대로 사용.
+            # 첨부·이미지·본문 디코딩 불필요 — 입력은 모두 GitHub API 로 가져온다.
+            if not payload.get("branch"):
+                raise SecuDeckError(
+                    "branch 누락",
+                    user_message=(
+                        "어느 브랜치를 리뷰할지 알려주세요. "
+                        "예: `feature/auth-rework 변경분 봐줘` 또는 `feature/auth-rework 통째로 리뷰`."
+                    ),
+                )
+            return payload
+
         if action == "interview_prep":
             # IntentRouter LLM 이 name/role/company/company_size 를 파라미터로 채워야 정상.
             # 비어 있으면 사용자에게 보충 요청.

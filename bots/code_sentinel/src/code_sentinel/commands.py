@@ -6,12 +6,7 @@ from discord import app_commands
 
 from sd_core.utils.errors import SecuDeckError
 
-from code_sentinel.github_fetcher import (
-    BranchDiff,
-    BranchSnapshot,
-    GitHubFetcher,
-    GitHubFetchError,
-)
+from code_sentinel.github_fetcher import GitHubFetcher, GitHubFetchError
 from code_sentinel.language_detector import detect_language
 from code_sentinel.reviewer import CodeReviewer
 from code_sentinel.ui import (
@@ -24,31 +19,6 @@ from sd_core.discord.ui import make_warning_embed
 
 
 _MAX_INLINE_CODE_CHARS = 60000  # 코드 첨부/입력 상한
-
-
-def _serialize_branch_diff(diff: BranchDiff) -> str:
-    """BranchDiff → 리뷰 LLM 에 넣을 markdown 본문."""
-    return (
-        f"# {diff.repo} — `{diff.base}` ... `{diff.branch}` "
-        f"(ahead {diff.ahead_by} commits)\n\n"
-        f"## 변경 파일 ({len(diff.changed_files)})\n"
-        + "\n".join(f"- {f}" for f in diff.changed_files)
-        + "\n\n## diff\n"
-        + diff.diff
-    )
-
-
-def _serialize_branch_snapshot(snap: BranchSnapshot) -> str:
-    """BranchSnapshot → 리뷰 LLM 에 넣을 markdown 본문 (파일 블록 결합)."""
-    head = (
-        f"# {snap.repo} — branch `{snap.branch}` 스냅샷\n"
-        f"파일 {len(snap.files)}개, 총 {snap.total_bytes:,}바이트"
-        f"{' (일부 절단됨)' if snap.truncated else ''}\n\n"
-    )
-    blocks: list[str] = [head]
-    for blob in snap.files:
-        blocks.append(f"## file: {blob.path}\n```\n{blob.content}\n```\n")
-    return "\n".join(blocks)
 
 
 async def _read_attachment_text(attachment: discord.Attachment) -> str:
@@ -180,7 +150,7 @@ class CodeCommands(app_commands.Group):
             )
             return
 
-        code = _serialize_branch_diff(diff)
+        code = diff.to_review_prompt()
         focus_value = focus.value if focus else None
         # diff 는 다언어 가능 — reviewer 는 language 를 prompt 표시용으로만 씀
         result = await self.reviewer.review(
@@ -234,7 +204,7 @@ class CodeCommands(app_commands.Group):
             )
             return
 
-        code = _serialize_branch_snapshot(snap)
+        code = snap.to_review_prompt()
         focus_value = focus.value if focus else None
         result = await self.reviewer.review(
             code=code, language="multi", focus=focus_value,
