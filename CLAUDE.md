@@ -12,7 +12,9 @@
 - main.py에서 `_BOT_ROOT = Path(__file__).resolve().parents[2]` 로 sibling 디렉토리(prompts/data/migrations) 접근
 - 환경변수: `DISCORD_BOT_TOKEN_<SUFFIX>` + `COST_MONTHLY_LIMIT_KRW_<SUFFIX>` — suffix는 `packages/core/src/sd_core/tracking/cost.py`의 `suffix_map`에 등록
 - 새 TaskType 추가 시 `packages/core/src/sd_core/llm/router.py`의 `MODEL_POLICY` 매핑 동시 갱신
-- cos 위임 가능한 새 (bot, action) 추가 시 3곳 동시 갱신: 봇 `internal_handlers.py` 핸들러 등록 + cos `intent_router.ROUTABLE_ACTIONS` + cos `synthesizer._ACTION_INTRO`
+- cos 위임 가능한 새 (bot, action) 추가 시 5곳 동시 갱신: 봇 `internal_handlers.py` 핸들러 + 봇 `main.py` 의 `api.register` + cos `intent_router.ROUTABLE_ACTIONS` + cos `synthesizer._ACTION_INTRO` + cos `delegator._build_payload` 액션 분기
+- 모든 봇 main.py 는 `await bot.start_with_backoff(token)` 사용 — 직접 `bot.start()` 금지. 부팅 단계 Discord 429 시 컨테이너 안에서 60초 sleep 으로 Railway 재시작 폭주 차단 (base_bot 헬퍼)
+- 슬래시 전용 봇은 base_bot 기본 intents 그대로 — Privileged Intent (`message_content` 등) 가 필요한 봇만 main.py 에서 `intents = discord.Intents.default(); intents.message_content = True` 구성 후 `SecuDeckBot(intents=...)` 주입. base_bot 기본은 OFF (Developer Portal 미활성화 시 부팅 실패 방지)
 - cos 가 다른 봇 호출 시 base URL 은 `BOT_URL_<SUFFIX>` 환경변수 (suffix 는 cost.py 와 동일) — `INTERNAL_API_SECRET` 은 5봇 공통값
 
 ## 자주 밟는 함정
@@ -23,6 +25,7 @@
 - Postgres 의존 코드는 항상 `DATABASE_URL` 없을 때 in-memory 폴백 — 봇은 부팅 가능해야 함
 - discord.py 2.x 의 `bot.add_cog()` 는 awaitable — Cog 를 쓰는 install_commands 는 `async def`, `bot.tree.add_command` 만 쓰는 헬퍼는 동기여도 됨
 - 라우팅·인트로처럼 결과가 정적 텍스트인 경로는 LLM 호출 금지 — 카탈로그 기반 템플릿이 비용·지연 둘 다 유리 (cos `synthesizer.make_delegation_intro` 참고)
+- Railway 는 한 푸시에 모노레포 모든 봇 재배포 — 한 봇 crash-loop 가 같은 클러스터 다른 봇들의 Discord 글로벌 429 까지 동시에 끌어올림. 사고 발견 시 영향 봇을 먼저 Pause 해 재시작 폭주를 끊을 것
 
 ## 검증
 - uv 미설치 환경: `python -c "import ast; [ast.parse(open(f).read()) for f in glob('...')]"` 로 syntax 검증

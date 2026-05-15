@@ -125,7 +125,19 @@ class BranchSnapshot:
 
 
 class GitHubFetchError(SecuDeckError):
+    """GitHub fetch 실패 — 첫 인자를 그대로 사용자 메시지로도 노출.
+
+    부모(``SecuDeckError``) 는 ``user_message`` 미지정 시 ``default_user_message``
+    로 폴백한다. 하지만 GitHub fetch 의 디버그 메시지는 모두 보안상 안전한
+    표준 정보(상태코드/브랜치명/권한 안내)뿐이라, 사용자에게 그대로 노출해
+    정확한 원인을 즉시 알 수 있게 한다. (default 로 떨어지면 'URL 또는 권한을
+    확인해 주세요' 같은 두루뭉술한 메시지가 나와 디버깅이 어려워진다.)
+    """
+
     default_user_message = "GitHub 가져오기에 실패했어요. URL 또는 권한을 확인해 주세요."
+
+    def __init__(self, message: str, user_message: str | None = None):
+        super().__init__(message, user_message=user_message or message)
 
 
 class GitHubFetcher:
@@ -207,8 +219,14 @@ class GitHubFetcher:
                 headers=headers,
             )
             if meta_resp.status_code >= 400:
+                # 응답 본문은 로그에만 — 사용자 메시지에는 노출 금지(인증 헤더 fragment 등 안전).
+                _log.warning(
+                    "pr_meta_fetch_failed",
+                    status=meta_resp.status_code,
+                    body=meta_resp.text[:200],
+                )
                 raise GitHubFetchError(
-                    f"PR 메타 조회 실패 ({meta_resp.status_code}): {meta_resp.text[:200]}"
+                    f"PR 메타 조회 실패 ({meta_resp.status_code}). URL·권한을 확인해 주세요."
                 )
             meta = meta_resp.json()
 
