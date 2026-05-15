@@ -17,6 +17,7 @@ BOT_DISPLAY: dict[str, tuple[str, str]] = {
     "interview_companion": ("🎙", "Interview Companion"),
     "design_echo": ("🎨", "Design Echo"),
     "argos_self_audit": ("🛡", "Argos Self-Audit"),
+    "schedule_bot": ("📅", "Schedule Bot"),
     "self": ("🏛", "Chief of Staff"),
 }
 

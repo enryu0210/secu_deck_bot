@@ -65,6 +65,10 @@ class Delegator:
             )
 
         payload = await self._build_payload(intent, message)
+        # schedule_bot 은 모든 액션이 guild_id 필요 — cos 가 디스코드 컨텍스트에서 자동 주입.
+        # (사용자는 DM 에서 쓰면 안 되며, 그 경우 핸들러가 친절 에러를 반환한다.)
+        if intent.bot == "schedule_bot":
+            self._inject_guild_context(payload, message)
         _log.info(
             "delegate_invoke",
             bot=intent.bot,
@@ -163,11 +167,51 @@ class Delegator:
                 )
             return payload
 
+        # ─────────────────── schedule_bot ───────────────────
+        # 조회 4종 — params 별도 필요 없음 (search 만 date 필수, IntentRouter LLM/룰이 채움).
+        if action in ("schedule_today", "schedule_week", "schedule_upcoming"):
+            return payload
+
+        if action == "schedule_search":
+            if not payload.get("date"):
+                raise SecuDeckError(
+                    "schedule_search date 누락",
+                    user_message="조회할 날짜를 알려주세요. 예: `2026-04-15` 또는 `4월 15일`.",
+                )
+            return payload
+
+        if action == "schedule_register":
+            # title/date 필수. time/description 선택. created_by 는 디스코드 사용자명으로 자동 주입.
+            missing = [k for k in ("title", "date") if not payload.get(k)]
+            if missing:
+                raise SecuDeckError(
+                    f"schedule_register 누락 필드: {missing}",
+                    user_message=(
+                        "일정을 등록하려면 제목과 날짜가 필요해요. "
+                        "예: '내일 14시 팀 회의 등록해줘' (날짜·시간 명시) 형태로 알려주세요."
+                    ),
+                )
+            payload.setdefault("created_by", str(message.author))
+            return payload
+
         # 알 수 없는 action — IntentRouter 카탈로그와 동기화 누락 가능.
         raise SecuDeckError(
             f"Delegator 가 모르는 action: {action}",
             user_message="내부 라우팅이 처리할 수 없는 작업이에요.",
         )
+
+    # -----------------------------------------------------------------
+    # guild_id 자동 주입 — schedule_bot 전용. 사용자가 매번 명시할 필요 없게.
+    # -----------------------------------------------------------------
+    @staticmethod
+    def _inject_guild_context(payload: dict[str, Any], message: discord.Message) -> None:
+        """디스코드 메시지에서 guild_id 를 끌어와 payload 에 강제 주입.
+
+        DM(메시지의 guild 가 None) 일 때 굳이 ConfigError 던지지 않고 빈 값을 둔다 —
+        schedule_bot 핸들러가 친절한 한국어 에러로 처리하도록 책임 위임.
+        """
+        if message.guild is not None:
+            payload["guild_id"] = str(message.guild.id)
 
     # -----------------------------------------------------------------
     # 첨부 헬퍼

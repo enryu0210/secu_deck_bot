@@ -43,6 +43,11 @@ _ACTION_INTRO: dict[str, str] = {
     "design_copy":       "UX 카피 검토로 연결합니다.",
     "audit_scan":        "Argos 레포 즉시 자가 점검을 실행할게요 (룰베이스, LLM 미호출).",
     "audit_feature":     "PRD 키워드 기반으로 관련 법령을 매핑해 드릴게요 (룰베이스, LLM 미호출).",
+    "schedule_today":    "오늘 일정을 가져올게요.",
+    "schedule_week":     "이번 주 일정을 정리해 드릴게요.",
+    "schedule_upcoming": "다가오는 일정 목록을 보여드릴게요.",
+    "schedule_search":   "지정하신 날짜의 일정을 조회할게요.",
+    "schedule_register": "팀 일정으로 등록해 드릴게요.",
 }
 
 

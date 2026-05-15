@@ -65,6 +65,16 @@ ROUTABLE_ACTIONS: dict[tuple[str, str], str] = {
         "Argos 레포 즉시 룰베이스 스캔 (시크릿/PII/KISA/레거시 + 의존성 CVE). LLM 호출 없음.",
     ("argos_self_audit", "audit_feature"):
         "신규 기능 PRD 텍스트 → 개인정보보호법 조항 키워드 매핑 + 위험 시나리오. params.prd_text 필수. LLM 호출 없음.",
+    ("schedule_bot", "schedule_today"):
+        "오늘 등록된 팀 일정 목록. payload 자동 (guild_id 는 cos 가 주입).",
+    ("schedule_bot", "schedule_week"):
+        "이번 주(오늘~일요일) 일정 목록.",
+    ("schedule_bot", "schedule_upcoming"):
+        "다가오는 일정 최대 10건. '다음 일정', '예정된 일정' 같은 질문에 사용.",
+    ("schedule_bot", "schedule_search"):
+        "특정 날짜 일정. params.date='YYYY-MM-DD' 필수. '4월 15일 일정' 같이 날짜가 명시될 때.",
+    ("schedule_bot", "schedule_register"):
+        "팀 일정 등록. params={title, date(YYYY-MM-DD), time?(HH:MM), description?} 필수.",
     ("self", "answer"):
         "위 봇으로 위임할 필요가 없는 가벼운 일반 질문. cos 가 직접 답변.",
 }
@@ -89,6 +99,22 @@ _AUDIT_SCAN_HINTS = re.compile(
     r"(self.?audit|자가.?검증|자가.?점검|레포.*스캔|repo.*scan|argos 점검|전체 점검)",
     re.IGNORECASE,
 )
+# 일정 봇 라우팅 — "일정/스케줄" 핵심 키워드가 있을 때만 발동.
+# "인터뷰 스케줄링" 같은 문맥은 _INTERVIEW_HINTS 가 앞단에서 잡으므로 충돌 위험 낮음.
+_SCHEDULE_HINTS = re.compile(r"(일정|스케줄|schedule)", re.IGNORECASE)
+_SCHEDULE_TODAY_HINTS = re.compile(r"(오늘|today)", re.IGNORECASE)
+_SCHEDULE_WEEK_HINTS = re.compile(r"(이번\s*주|this\s*week|금주)", re.IGNORECASE)
+_SCHEDULE_UPCOMING_HINTS = re.compile(
+    r"(예정|다가오는|앞으로|다음.*일정|일정.*목록|upcoming|list)",
+    re.IGNORECASE,
+)
+_SCHEDULE_REGISTER_HINTS = re.compile(
+    r"(등록|추가|잡아\s*줘|잡아주세요|만들어\s*줘|add|create|register)",
+    re.IGNORECASE,
+)
+# "YYYY-MM-DD" 또는 "M월 D일" 패턴 추출 — 날짜검색 라우팅 보조.
+_DATE_ISO_RE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
+_DATE_KR_RE = re.compile(r"(\d{1,2})\s*월\s*(\d{1,2})\s*일")
 
 
 @dataclass
@@ -219,6 +245,72 @@ class IntentRouter:
                 source="rule",
             )
 
+        # 일정/스케줄 키워드 — 첨부 없는 경우만 (첨부 있으면 다른 봇이 우선).
+        # "인터뷰 스케줄" 같이 _INTERVIEW_HINTS 가 함께 잡히는 경우 LLM 위임.
+        if _SCHEDULE_HINTS.search(text) and not _INTERVIEW_HINTS.search(text):
+            # 1) "오늘 일정" → schedule_today
+            if _SCHEDULE_TODAY_HINTS.search(text):
+                return Intent(
+                    bot="schedule_bot",
+                    action="schedule_today",
+                    reason="오늘 + 일정 키워드",
+                    confidence=0.85,
+                    source="rule",
+                )
+            # 2) "이번 주 일정" → schedule_week
+            if _SCHEDULE_WEEK_HINTS.search(text):
+                return Intent(
+                    bot="schedule_bot",
+                    action="schedule_week",
+                    reason="이번 주 + 일정 키워드",
+                    confidence=0.85,
+                    source="rule",
+                )
+            # 3) "YYYY-MM-DD" 또는 "M월 D일" 명시 → schedule_search
+            iso = _DATE_ISO_RE.search(text)
+            if iso:
+                return Intent(
+                    bot="schedule_bot",
+                    action="schedule_search",
+                    reason="ISO 날짜 명시 + 일정 키워드",
+                    confidence=0.85,
+                    params={"date": iso.group(1)},
+                    source="rule",
+                )
+            kr = _DATE_KR_RE.search(text)
+            if kr:
+                # 연도 없는 한국식 표기 — 올해 기준 추정 (보수적이라 LLM 재분류 여지 남김).
+                import datetime as _dt
+                year = _dt.datetime.now().year
+                month, day = int(kr.group(1)), int(kr.group(2))
+                try:
+                    iso_date = f"{year:04d}-{month:02d}-{day:02d}"
+                    _dt.datetime.strptime(iso_date, "%Y-%m-%d")  # 유효성
+                    return Intent(
+                        bot="schedule_bot",
+                        action="schedule_search",
+                        reason="한국식 날짜 표기 + 일정 키워드 (올해 기준)",
+                        confidence=0.7,
+                        params={"date": iso_date},
+                        source="rule",
+                    )
+                except ValueError:
+                    pass
+            # 4) "예정/다가오는/목록" → schedule_upcoming
+            if _SCHEDULE_UPCOMING_HINTS.search(text):
+                return Intent(
+                    bot="schedule_bot",
+                    action="schedule_upcoming",
+                    reason="예정/목록 + 일정 키워드",
+                    confidence=0.8,
+                    source="rule",
+                )
+            # 5) "등록/추가/잡아줘" — title/date 파싱이 필요하므로 LLM 위임.
+            if _SCHEDULE_REGISTER_HINTS.search(text):
+                return None
+            # 일정 키워드만 있고 액션 불명 → LLM 위임 (의도 파악 부족)
+            return None
+
         # 강한 인터뷰 키워드
         if _INTERVIEW_HINTS.search(text):
             # 가이드 vs 누적분석 구분은 LLM 으로 — 입력 정보가 부족할 때 명확치 않음.
@@ -236,8 +328,14 @@ class IntentRouter:
     # -----------------------------------------------------------------
     async def _classify_by_llm(self, route_in: RouteInput, user_id: str) -> Intent:
         # user 메시지에 첨부 메타데이터를 텍스트로 노출 (Haiku 가 룰 못 잡은 경우 보강).
+        # today 도 함께 노출 — schedule_register/search 가 "내일/모레" 같은 상대 날짜를
+        # YYYY-MM-DD 로 변환하려면 기준 날짜가 필요. system 프롬프트에 넣으면 캐시가 깨지므로
+        # user 메시지 단에서 매 호출 갱신.
+        import datetime as _dt
+        today_str = _dt.date.today().strftime("%Y-%m-%d")
         atts_desc = self._summarize_attachments(route_in)
         user_text = (
+            f"## 오늘 날짜\n{today_str}\n\n"
             f"## 사용자 메시지\n{route_in.text or '(빈 메시지)'}\n\n"
             f"## 첨부\n{atts_desc or '(없음)'}\n"
         )
@@ -330,6 +428,13 @@ class IntentRouter:
             "- 사용자 메시지에 페르소나·가설 ID 등이 명시돼 있으면 params 에 그대로 옮겨 담을 것.",
             "- 정보가 부족해 위임이 어려우면 self 로 보내 cos 가 추가 정보를 요청하도록.",
             "- 절대 카탈로그에 없는 (bot, action) 을 만들지 말 것.",
+            "",
+            "## schedule_bot 입력 규칙",
+            "- 날짜는 항상 `YYYY-MM-DD` 형식. 사용자가 '내일/모레/다음 주 월요일' 등 상대 표현을 쓰면",
+            "  user 메시지 상단의 '오늘 날짜' 를 기준으로 변환해 params.date 에 넣는다.",
+            "- 시간은 `HH:MM` 24시간 형식. '오후 2시', '14시' 모두 `14:00`.",
+            "- schedule_register 시 title 은 일정 핵심 명사구만 (예: '팀 회의'). 메시지 전체 복사 금지.",
+            "- guild_id 는 절대 LLM 이 채우지 말 것 — cos delegator 가 디스코드 컨텍스트에서 자동 주입.",
             "",
             *catalog_lines,
         ])

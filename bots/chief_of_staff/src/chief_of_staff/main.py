@@ -9,6 +9,7 @@
     INTERNAL_API_SECRET           (필수 — 4봇과 공유)
     BOT_URL_PITCH / _CODE / _INTERVIEW / _DESIGN  (필수)
     BOT_URL_AUDIT                 (선택 — Stage 6 도입 후)
+    BOT_URL_SCHEDULE              (선택 — 일정 봇 위임용)
     DISCORD_GUILD_ID              (선택 — 개발 중 길드 동기화)
     COST_MONTHLY_LIMIT_KRW_COS    (선택 — 기본 30000)
 
