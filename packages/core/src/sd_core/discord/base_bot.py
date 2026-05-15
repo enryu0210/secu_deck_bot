@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import Any
 
@@ -135,6 +136,44 @@ class SecuDeckBot(commands.Bot):
                 await interaction.response.send_message(user_msg, ephemeral=True)
         except discord.HTTPException as exc:
             self._log.warning("error_response_failed", error=str(exc))
+
+    # -----------------------------------------------------------------
+    # 부팅 안전장치
+    # -----------------------------------------------------------------
+    async def start_with_backoff(
+        self,
+        token: str,
+        *,
+        rate_limit_sleep: float = 60.0,
+    ) -> None:
+        """``start()`` 의 안전 래퍼 — Railway/PaaS 환경의 ``crash-loop`` 방지용.
+
+        부팅 단계(``GET /users/@me``)에서 Discord 429(global rate limit) 같은
+        일시 장애를 만나면, 예외를 다시 던지기 전에 컨테이너 안에서
+        ``rate_limit_sleep`` 만큼 잠든다.
+
+        왜:
+        - PaaS 가 컨테이너를 즉시 재시작하면 1초당 60+회씩 ``/users/@me`` 를
+          두드리게 되고, 이 트래픽 자체가 Discord 의 rate limit 윈도우를
+          더 길게 만든다. (실제 2026-05-15 schedule_bot crash 때 다른 봇들까지
+          429 에 휘말렸음.)
+        - 컨테이너 안에서 sleep 으로 지연을 흡수하면 재시작 빈도가
+          1초당 → 1분당으로 떨어져 악순환이 끊긴다.
+        - 정상 부팅 시에는 아무런 비용도 들지 않는다 (try 블록의 happy path).
+        """
+        try:
+            await self.start(token)
+        except discord.errors.HTTPException as exc:
+            # 429 외 다른 HTTPException(401 토큰 오류 등)은 backoff 의미 없음
+            if exc.status == 429:
+                self._log.error(
+                    "startup_rate_limited",
+                    status=exc.status,
+                    sleep_sec=rate_limit_sleep,
+                    hint="컨테이너 안에서 sleep 으로 재시작 폭주를 묶고 종료한다",
+                )
+                await asyncio.sleep(rate_limit_sleep)
+            raise
 
     # -----------------------------------------------------------------
     # 편의 메서드

@@ -71,7 +71,7 @@ async def _async_main() -> None:
     async with bot:
         await api.start()
         try:
-            await bot.start(token)
+            await bot.start_with_backoff(token)
         finally:
             await api.stop()
 

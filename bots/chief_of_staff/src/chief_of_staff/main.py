@@ -79,7 +79,7 @@ async def _async_main() -> None:
             guild_sync=bot._sync_guild_id,
         )
         try:
-            await bot.start(token)
+            await bot.start_with_backoff(token)
         finally:
             # httpx.AsyncClient 정리 — 누수 방지.
             await client.close()
