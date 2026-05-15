@@ -20,6 +20,13 @@ import json
 from typing import Any
 
 import discord
+# fastapi 심볼은 반드시 module top-level 에서 import 한다.
+# 이유: `from __future__ import annotations` 가 켜져 있어 타입 힌트가 문자열로
+# 보관되는데, FastAPI 가 시그니처를 해석할 때 함수의 ``__globals__``(=모듈 globals)
+# 에서 이름을 찾는다. ``install()`` 안에서 lazy import 하면 ``Request`` 가 모듈
+# globals 에 없어서 FastAPI 가 ``request`` 를 일반 쿼리 파라미터로 오해한다
+# (실제로 GitHub webhook 호출 시 422 "Field required: query.request" 반환).
+from fastapi import Header, HTTPException, Request
 
 from sd_core.discord.internal_client import InternalAPIClient
 from sd_core.utils.errors import SecuDeckError
@@ -65,8 +72,6 @@ class GitHubWebhookHandler:
     # FastAPI 라우트 훅 — InternalAPIServer.add_route_hook 에 전달
     # -----------------------------------------------------------------
     def install(self, app: Any) -> None:
-        from fastapi import Header, HTTPException, Request
-
         handler = self
 
         @app.post("/webhook/github")
