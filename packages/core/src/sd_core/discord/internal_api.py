@@ -26,6 +26,20 @@ from typing import Any, Awaitable, Callable
 from sd_core.utils.errors import ConfigError, SecuDeckError
 from sd_core.utils.logger import get_logger
 
+# fastapi 는 sd_core 의 optional dependency (코어 자체는 fastapi 의존 X).
+# 단, ``Request`` 만큼은 module top-level 에 있어야 한다.
+# 이유: ``from __future__ import annotations`` 로 타입 힌트가 문자열로 보관되는데,
+# FastAPI 가 시그니처를 해석할 때 함수의 ``__globals__`` (=이 모듈의 globals) 에서
+# 이름을 찾는다. ``_build_app`` 안에서만 lazy import 하면 ``Request`` 가 모듈
+# globals 에 없어서 FastAPI 가 ``request: Request`` 파라미터를 일반 쿼리 파라미터로
+# 오해한다 (실측: GitHub webhook 호출 시 422 "Field required: query.request").
+# 따라서 try/except 로 감싸 import 실패해도 모듈 로딩은 유지하되, 실제 사용 시점
+# (``_build_app``) 에서 명확한 한국어 ConfigError 를 던지도록 한다.
+try:
+    from fastapi import Header, HTTPException, Request
+except ImportError:
+    Header = HTTPException = Request = None  # type: ignore[assignment,misc]
+
 
 # 봇 핸들러 시그니처. payload 는 cos 가 보낸 자유 dict, user_id 는 디스코드 사용자 ID.
 HandlerFn = Callable[..., Awaitable[dict[str, Any]]]
@@ -99,14 +113,15 @@ class InternalAPIServer:
     # FastAPI 앱 빌드 (lazy)
     # -----------------------------------------------------------------
     def _build_app(self) -> Any:
-        try:
-            from fastapi import FastAPI, Header, HTTPException, Request
-        except ImportError as exc:  # noqa: F841
-            # 봇 pyproject.toml 에 fastapi 가 빠진 경우. 명확한 한국어 안내.
+        # Header/HTTPException/Request 는 module top 에서 try/except 로 import 했음.
+        # None 이면 fastapi 미설치 — 명확한 한국어 안내로 즉시 실패.
+        if Request is None:
             raise ConfigError(
                 "fastapi 미설치 — 봇 pyproject.toml 의 dependencies 에 "
                 "'fastapi>=0.110' 와 'uvicorn>=0.30' 추가 후 'uv sync' 다시 실행해 주세요."
-            ) from exc
+            )
+        # FastAPI 클래스만 lazy 유지 — annotation 에 안 쓰이고 호출 시점에만 필요.
+        from fastapi import FastAPI
 
         app = FastAPI(
             title=f"{self.bot_name} internal API",
