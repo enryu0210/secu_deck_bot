@@ -140,6 +140,51 @@ class GitHubFetchError(SecuDeckError):
         super().__init__(message, user_message=user_message or message)
 
 
+def _extract_github_message(resp: httpx.Response) -> str | None:
+    """GitHub 4xx 응답의 ``message`` 필드만 안전하게 추출.
+
+    응답 본문 전체는 인증 헤더 fragment 가 섞일 위험 등으로 노출 금지.
+    ``message`` 필드는 GitHub 가 공식적으로 사용자 안내용으로 두는 값 — 노출 안전.
+    예: "Bad credentials" / "Not Found" / "API rate limit exceeded for ..."
+    """
+    try:
+        body = resp.json()
+    except (ValueError, TypeError):
+        return None
+    if isinstance(body, dict):
+        m = body.get("message")
+        if isinstance(m, str) and m:
+            return m[:200]
+    return None
+
+
+def _diagnose_status(status: int, github_msg: str | None, scope: str) -> str:
+    """상태코드별 사용자 친화 진단 메시지.
+
+    403 을 일률적으로 '브랜치명 확인' 으로 안내하면 잘못된 곳을 의심하게 만든다.
+    GitHub 의 의미를 그대로 살려 권한·rate limit·존재 여부를 구분해 노출.
+    """
+    suffix = f" — GitHub: \"{github_msg}\"" if github_msg else ""
+    if status == 401:
+        return (
+            f"{scope} 실패 (401, 인증 오류). GITHUB_PAT 가 유효한지 또는 "
+            f"만료되지 않았는지 확인해 주세요.{suffix}"
+        )
+    if status == 403:
+        return (
+            f"{scope} 실패 (403, 권한 부족 또는 rate limit). "
+            f"private 레포라면 GITHUB_PAT 에 'repo' (classic) 또는 'Contents: Read' "
+            f"(fine-grained) 권한이 있어야 해요. PAT 미설정이라면 시간당 60회 "
+            f"rate limit 가능성 — 잠시 후 재시도하거나 PAT 를 설정해 주세요.{suffix}"
+        )
+    if status == 404:
+        return (
+            f"{scope} 실패 (404, 리소스 없음). 레포·브랜치 이름 오타 또는 "
+            f"private 레포에 PAT 미설정 가능성.{suffix}"
+        )
+    return f"{scope} 실패 ({status}).{suffix}"
+
+
 class GitHubFetcher:
     """GitHub REST API 로 PR / 브랜치 diff / 브랜치 스냅샷을 가져옴."""
 
@@ -274,8 +319,14 @@ class GitHubFetcher:
             headers=self._headers(),
         )
         if resp.status_code >= 400:
+            _log.warning(
+                "repo_meta_failed",
+                status=resp.status_code,
+                owner=owner, repo=repo,
+                body=resp.text[:300],
+            )
             raise GitHubFetchError(
-                f"레포 조회 실패 ({resp.status_code}). 권한·이름을 확인해 주세요."
+                _diagnose_status(resp.status_code, _extract_github_message(resp), "레포 조회")
             )
         return resp.json().get("default_branch") or "main"
 
@@ -317,8 +368,19 @@ class GitHubFetcher:
             )
             meta_resp = await client.get(compare_url, headers=self._headers())
             if meta_resp.status_code >= 400:
+                _log.warning(
+                    "branch_compare_failed",
+                    status=meta_resp.status_code,
+                    owner=owner, repo=name,
+                    branch=branch, base=base_branch,
+                    body=meta_resp.text[:300],
+                )
                 raise GitHubFetchError(
-                    f"브랜치 비교 실패 ({meta_resp.status_code}). 브랜치명을 확인해 주세요."
+                    _diagnose_status(
+                        meta_resp.status_code,
+                        _extract_github_message(meta_resp),
+                        "브랜치 비교",
+                    )
                 )
             meta = meta_resp.json()
             changed = [f["filename"] for f in (meta.get("files") or [])][:30]
@@ -330,8 +392,19 @@ class GitHubFetcher:
                 headers=self._headers("application/vnd.github.v3.diff"),
             )
             if diff_resp.status_code >= 400:
+                _log.warning(
+                    "branch_diff_failed",
+                    status=diff_resp.status_code,
+                    owner=owner, repo=name,
+                    branch=branch, base=base_branch,
+                    body=diff_resp.text[:300],
+                )
                 raise GitHubFetchError(
-                    f"브랜치 diff 조회 실패 ({diff_resp.status_code})"
+                    _diagnose_status(
+                        diff_resp.status_code,
+                        _extract_github_message(diff_resp),
+                        "브랜치 diff 조회",
+                    )
                 )
             diff_text = diff_resp.text
             if len(diff_text) > max_diff_chars:
@@ -376,9 +449,18 @@ class GitHubFetcher:
         ) as client:
             resp = await client.get(tarball_url, headers=self._headers())
             if resp.status_code >= 400:
+                _log.warning(
+                    "branch_tarball_failed",
+                    status=resp.status_code,
+                    owner=owner, repo=name, branch=branch,
+                    body=resp.text[:300],
+                )
                 raise GitHubFetchError(
-                    f"브랜치 tarball 다운로드 실패 ({resp.status_code}). "
-                    "브랜치명·권한을 확인해 주세요."
+                    _diagnose_status(
+                        resp.status_code,
+                        _extract_github_message(resp),
+                        "브랜치 tarball 다운로드",
+                    )
                 )
             raw = resp.content
 
